@@ -16,7 +16,7 @@ _No response_
 
 ### Maintainer notes
 
-Oma Edge 0.1.1 is an initial preview. Reserve a left/right strip for real app windows while native tiling uses the remaining monitor area. Includes workspace profiles, app selection, adjustable width/heights with automatic reflow when apps close/reopen, and optional full-width bar coverage.
+Oma Edge 0.1.2 is an initial preview. Reserve a left/right strip for real app windows while native tiling uses the remaining monitor area. Includes workspace profiles, app selection, adjustable width/heights with automatic reflow when apps close/reopen, and optional full-width bar coverage.
 
 Manual setup required: after plugin installation, explicitly run install.py. It backs up and edits user Hyprland Lua configuration and adapts a compatible user-owned Omarchy bar clone. No privileged installation, package downloads, remote code execution, or network service is used. Uninstall restores the integration; profiles and backups are retained. See README for capabilities, compatibility requirements, and recovery.
 

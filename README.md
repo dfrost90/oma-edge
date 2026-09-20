@@ -165,8 +165,9 @@ optional. Use the uninstall script before deleting the source.
   offered as new assignments. The controller doesn't close applications.
 - Windows are floating. Apply, workspace switches, and relevant compositor
   events restore their slot geometry; this is not a hard compositor drag lock.
-- Some apps enforce a minimum size larger than a requested slot. Use fewer
-  slots or increase the width for those apps.
+- App minimum heights are detected after resizing; other tiles share the remaining
+  space while retaining gaps. If minimum heights cannot fit, use fewer slots or a
+  taller monitor. Apps may also enforce a minimum width; increase strip width if needed.
 - Geometry covers scale, rotation and monitor offsets in tests. Physical
   multi-monitor hotplug has not yet been verified on hardware.
 
@@ -195,7 +196,7 @@ License: MIT.
 
 ## Release status
 
-Version 0.1.1 is a preview release. See [CHANGELOG.md](CHANGELOG.md)
+Version 0.1.2 is a preview release. See [CHANGELOG.md](CHANGELOG.md)
 and [release/RELEASE.md](release/RELEASE.md) for verification and publication steps.
 The persistent plugin ID remains `io.github.dfrost90.edge-strip` for upgrade
 compatibility; Oma Edge is its display name. Node.js and Lua are development

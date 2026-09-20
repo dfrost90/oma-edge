@@ -120,7 +120,7 @@ def logical_size(m):
         w, h = h, w
     return round(w / m['scale']), round(h / m['scale'])
 
-def geometry(m, p, current=(0, 0)):
+def geometry(m, p, current=(0, 0), minimums=None):
     w, h = logical_size(m)
     strip = round(w * p['width'] / 100)
     left, top, right, bottom = m.get('reserved', [0, 0, 0, 0])
@@ -130,16 +130,33 @@ def geometry(m, p, current=(0, 0)):
     available = h-top-bottom-24 - max(0, len(p['slots'])-1)*14
     if available < len(p['slots'])*100 or strip < 100:
         raise ValueError('Not enough screen space for this many slots')
-    total = sum(s['weight'] for s in p['slots']) or 1
-    consumed = 0
+    floors = minimums or [0] * len(p['slots'])
+    if sum(floors) > available:
+        raise ValueError('App minimum heights do not fit this strip. Remove an app or use a taller monitor.')
+    # Weighted water-filling: fix apps at their minimum, then divide the rest.
+    heights = [0] * len(p['slots'])
+    remaining = set(range(len(heights)))
+    budget = available
+    while remaining:
+        total = sum(p['slots'][i]['weight'] for i in remaining)
+        constrained = [i for i in remaining if budget * p['slots'][i]['weight'] / total < floors[i]]
+        if not constrained:
+            accumulated = 0
+            consumed = 0
+            for i in sorted(remaining):
+                accumulated += p['slots'][i]['weight']
+                end = round(budget * accumulated / total)
+                heights[i] = end - consumed
+                consumed = end
+            break
+        for i in constrained:
+            heights[i] = floors[i]
+            budget -= floors[i]
+            remaining.remove(i)
     boxes = []
-    acc = 0
-    for i, slot in enumerate(p['slots']):
-        acc += slot['weight']
-        end = round(available*acc/total)
-        height = end-consumed
-        boxes.append((x+12, y+consumed+i*14, strip-24, height))
-        consumed = end
+    for height in heights:
+        boxes.append((x+12, y, strip-24, height))
+        y += height + 14
     return strip, boxes
 
 class Hypr:
@@ -184,6 +201,9 @@ class Controller:
         self.reservations = {}
         self.managed = {}
         self.bindings = {}
+        self.minimum_heights = {}
+        self.size_requests = {}
+        self.settle_at = None
         self.error = ''
         self.config_error = ''
         self.last_state = None
@@ -236,6 +256,8 @@ class Controller:
     def reconcile(self, config_reload=False):
         try:
             self.refresh()
+            if self.settle_at is not None and time.monotonic() >= self.settle_at:
+                self.settle_at = None
             if config_reload:
                 self.reservations = {}
             active = {m['name']: active_profile(self.config, m) for m in self.monitors}
@@ -294,7 +316,17 @@ class Controller:
                     matched.append((slot, c))
                 m, current = contexts[id(p)]
                 occupied = dict(p, slots=[slot for slot, _ in matched])
-                boxes = geometry(m, occupied, current)[1]
+                target_width = round(logical_size(m)[0] * p['width'] / 100) - 24
+                size_keys = [(c['address'], self.identity(c), target_width) for _, c in matched]
+                # Wayland clients acknowledge requested sizes asynchronously.
+                # Inspect the settled result of our previous resize before retrying.
+                for key, (_, client) in zip(size_keys, matched):
+                    request = self.size_requests.get(key)
+                    if request and .12 <= time.monotonic() - request[1] <= 2 and not client.get('fullscreen'):
+                        if client['size'][1] > request[0] + 1:
+                            self.minimum_heights[key] = client['size'][1]
+                floors = [self.minimum_heights.get(key, 0) for key in size_keys]
+                boxes = geometry(m, occupied, current, floors)[1]
                 for (slot, c), box in zip(matched, boxes):
                     address = c['address']
                     if address in self.managed and self.managed[address]['identity'] != self.identity(c):
@@ -328,9 +360,17 @@ class Controller:
                         continue  # Don't fight user-requested fullscreen.
                     x, y, w, h = box
                     if c['size'] != [w, h]:
+                        key = (address, self.identity(c), w)
+                        previous = self.size_requests.get(key)
+                        if previous is None or previous[0] != h:
+                            self.size_requests[key] = (h, time.monotonic())
+                            self.settle_at = time.monotonic() + .2
                         self.hypr.dispatch('resizewindowpixel', f'exact {w} {h},{target}')
                     if c['at'] != [x, y]:
                         self.hypr.dispatch('movewindowpixel', f'exact {x} {y},{target}')
+            self.size_requests = {key: value for key, value in self.size_requests.items() if key[0] in used}
+            self.minimum_heights = {key: value for key, value in self.minimum_heights.items()
+                                    if key[0] in used}
             for address in list(self.managed):
                 if address not in used:
                     self.restore(address, by_address.get(address))
@@ -447,7 +487,9 @@ def daemon():
             if pending is not None and now >= pending:
                 controller.reconcile(reload_pending)
                 reload_pending = False
-                pending = None
+                pending = controller.settle_at
+            if pending is None and controller.settle_at is not None:
+                pending = controller.settle_at
             readers, _, _ = select.select([server] + ([events] if events else []), [], [], .15)
             if events in readers:
                 chunk = events.recv(65536)

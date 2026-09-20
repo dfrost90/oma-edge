@@ -40,6 +40,18 @@ class ModelTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 e.validate({'version':1, 'enabled':True, 'profiles':profiles})
 
+    def test_app_minimum_height_preserves_gaps_and_total(self):
+        p = profile(slots=[{'weight':1}, {'weight':1}, {'weight':1}])
+        _, boxes = e.geometry(monitor(), p, (0,688), [0,504,0])
+        self.assertEqual([b[3] for b in boxes], [427,504,427])
+        self.assertEqual(boxes[1][1] - (boxes[0][1] + boxes[0][3]), 14)
+        self.assertEqual(boxes[2][1] - (boxes[1][1] + boxes[1][3]), 14)
+        self.assertEqual(boxes[-1][1] + boxes[-1][3], 1428)
+
+    def test_impossible_app_minimums_fail(self):
+        with self.assertRaisesRegex(ValueError, 'minimum heights'):
+            e.geometry(monitor(), profile(), (0,688), [900,900])
+
     def test_original_geometry(self):
         strip, boxes = e.geometry(monitor(), profile(), (0, 688))
         self.assertEqual(strip, 688)

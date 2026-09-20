@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.dfrost90.edge-strip",
   "name": "Oma Edge",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "author": "dfrost90",
   "license": "MIT",
   "description": "Workspace-aware reserved app strips alongside native Hyprland layouts",

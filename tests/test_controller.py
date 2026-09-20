@@ -124,6 +124,21 @@ class DynamicHeightTests(unittest.TestCase):
         self.assertAlmostEqual(heights['address:0x3'] / heights['address:0x1'], 2, delta=.01)
         self.assertNotIn('0x2', self.controller.managed)
 
+    def test_delayed_minimum_height_acknowledgement_reflows_with_gaps(self):
+        self.configure_three()
+        self.resize_heights()
+        deadline = self.controller.settle_at
+        self.assertIsNotNone(deadline)
+        for c, height, y in zip(self.hypr.clients, (453,504,453), (42,509,975)):
+            c['size'] = [664,height]
+            c['at'] = [2764,y]
+        with patch.object(e.time, 'monotonic', return_value=deadline + .01):
+            heights = self.resize_heights()
+        self.assertEqual(heights, {'address:0x1':427, 'address:0x3':427})
+        moves = [v for a,v in self.hypr.actions if a == 'movewindowpixel']
+        self.assertIn('exact 2764 483,address:0x2', moves)
+        self.assertIn('exact 2764 1001,address:0x3', moves)
+
     def test_single_present_app_fills_height_and_no_apps_is_safe(self):
         self.configure_three()
         self.hypr.clients = self.hypr.clients[:1]

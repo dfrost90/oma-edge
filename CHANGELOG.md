@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2 — Preserve gaps around minimum-size apps
+
+- Respect minimum app heights such as Telegram’s instead of overlapping the next tile.
+- Recheck asynchronous resize acknowledgements and redistribute the remaining height.
+- Verified kitty / Telegram / YouTube at 427 / 504 / 427 px with 14 px gaps.
+
 ## 0.1.1 — Dynamic tile heights
 
 - Divide strip height among currently present apps instead of reserving empty slots.
