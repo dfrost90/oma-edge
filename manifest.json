@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.dfrost90.edge-strip",
+  "name": "Oma Edge",
+  "version": "0.1.0",
+  "author": "dfrost90",
+  "license": "MIT",
+  "description": "Workspace-aware reserved app strips alongside native Hyprland layouts",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Oma Edge",
+    "category": "System",
+    "defaultSection": "left",
+    "allowMultiple": false
+  }
+}
