@@ -239,7 +239,7 @@ class Controller:
             if config_reload:
                 self.reservations = {}
             active = {m['name']: active_profile(self.config, m) for m in self.monitors}
-            boxes = {}
+            contexts = {}
             for m in self.monitors:
                 p = active[m['name']]
                 current = self.reservations.get(m['name'], (0, 0))
@@ -262,7 +262,7 @@ class Controller:
                         # back from another display merely because it has apps.
                         if workspace and workspace.get('monitor') != m['name']:
                             continue
-                        boxes[id(profile)] = geometry(m, profile, current)[1]
+                        contexts[id(profile)] = (m, current)
             used = set()
             by_address = {c['address']: c for c in self.clients}
             by_class = {}
@@ -270,12 +270,13 @@ class Controller:
                 if client['mapped'] and (client['address'] in self.managed or
                         not (client.get('fullscreen') or client.get('grouped'))):
                     by_class.setdefault(client['class'], []).append(client)
-            profiles = [p for p in self.config['profiles'] if id(p) in boxes]
+            profiles = [p for p in self.config['profiles'] if id(p) in contexts]
             # Visible profiles get first claim if several profiles match the same app.
             profiles.sort(key=lambda p: active.get(p['monitor']) is not p)
             for p in profiles:
                 visible = active.get(p['monitor']) is p
-                for slot, box in zip(p['slots'], boxes[id(p)]):
+                matched = []
+                for slot in p['slots']:
                     candidates = [c for c in by_class.get(slot['class'], []) if c['address'] not in used]
                     candidates.sort(key=lambda c: (c['address'] != self.bindings.get(slot['id']),
                                                     str(c.get('stableId', '')) != slot['preferred'],
@@ -284,8 +285,18 @@ class Controller:
                         continue
                     c = candidates[0]
                     address = c['address']
+                    # Select first, then lay out only occupied slots. Missing apps
+                    # keep their assignment for reopening, not an empty rectangle.
+                    if (address not in self.managed or self.managed[address]['identity'] != self.identity(c)) and (c.get('fullscreen') or c.get('grouped')):
+                        continue
                     self.bindings[slot['id']] = address
                     used.add(address)
+                    matched.append((slot, c))
+                m, current = contexts[id(p)]
+                occupied = dict(p, slots=[slot for slot, _ in matched])
+                boxes = geometry(m, occupied, current)[1]
+                for (slot, c), box in zip(matched, boxes):
+                    address = c['address']
                     if address in self.managed and self.managed[address]['identity'] != self.identity(c):
                         self.managed.pop(address)
                     if address not in self.managed:

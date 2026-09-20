@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1 — Dynamic tile heights
+
+- Divide strip height among currently present apps instead of reserving empty slots.
+- Reflow on app close/reopen and assignment removal; preserve configured order and height shares.
+- Verify three equal tiles become two equal tiles and return to thirds on reopening.
+
 ## 0.1.0 — Initial preview
 
 - Reserve a left/right monitor strip for up to six app windows while retaining native tiling.

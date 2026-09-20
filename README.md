@@ -117,8 +117,9 @@ private `special:edge-strip` workspace. Removing their assignment restores
 their original workspace. A single live window shared by several profiles is
 claimed by the active profile first.
 
-The strip remains reserved when assigned apps are closed. Reopening a matching
-app fills the empty slot. Identification uses exact window class, preferring
+The strip remains reserved when assigned apps are closed, but its height is
+redistributed among present apps according to their height shares. Reopening a
+matching app restores its position in the order and recalculates every tile. Identification uses exact window class, preferring
 the selected window within the current session; apps with indistinguishable
 classes cannot be reliably distinguished after a restart. Use separate web-app
 windows for sites such as YouTube.
@@ -194,7 +195,7 @@ License: MIT.
 
 ## Release status
 
-Version 0.1.0 is an initial preview release. See [CHANGELOG.md](CHANGELOG.md)
+Version 0.1.1 is a preview release. See [CHANGELOG.md](CHANGELOG.md)
 and [release/RELEASE.md](release/RELEASE.md) for verification and publication steps.
 The persistent plugin ID remains `io.github.dfrost90.edge-strip` for upgrade
 compatibility; Oma Edge is its display name. Node.js and Lua are development
