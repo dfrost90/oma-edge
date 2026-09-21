@@ -148,3 +148,50 @@ class DynamicHeightTests(unittest.TestCase):
         self.assertEqual(self.controller.managed, {})
 
 if __name__=='__main__': unittest.main()
+
+
+class TerminalSelectionTests(unittest.TestCase):
+    setUp = ControllerTests.setUp
+
+    def configure(self):
+        self.cliamp = dict(client('kitty', 2), title='cliamp')
+        self.nvim = dict(client('kitty', 1), title='tmux nvim')
+        self.hypr.clients = [self.nvim, self.cliamp]
+        self.controller.config = e.validate({'version': 1, 'enabled': True,
+            'profiles': [profile(slots=[{'id': 'terminal', 'class': 'kitty',
+                'preferred': '2', 'windowTitle': 'cliamp', 'weight': 1}])]})
+
+    def test_explicit_selection_beats_old_binding_and_survives_title_change(self):
+        self.configure()
+        self.controller.bindings['terminal'] = self.nvim['address']
+        self.controller.reconcile()
+        self.assertEqual(self.controller.error, '')
+        self.assertEqual(set(self.controller.managed), {self.cliamp['address']})
+        self.cliamp['title'] = 'Playing a song'
+        self.controller.reconcile()
+        self.assertEqual(set(self.controller.managed), {self.cliamp['address']})
+
+    def test_close_does_not_capture_nvim_and_reopen_reclaims_by_title(self):
+        self.configure()
+        self.controller.reconcile()
+        self.hypr.clients = [self.nvim]
+        self.controller.reconcile()
+        self.assertEqual(self.controller.managed, {})
+        reopened = dict(client('kitty', 3), title='cliamp')
+        self.hypr.clients.append(reopened)
+        self.controller.reconcile()
+        self.assertEqual(set(self.controller.managed), {reopened['address']})
+        reopened['title'] = 'Playing a song'
+        self.controller.reconcile()
+        self.assertEqual(set(self.controller.managed), {reopened['address']})
+
+    def test_ambiguous_title_and_legacy_slots_do_not_capture_other_terminals(self):
+        self.configure()
+        slot = self.controller.config['profiles'][0]['slots'][0]
+        slot['preferred'] = 'missing'
+        self.nvim['title'] = 'cliamp'
+        self.controller.reconcile()
+        self.assertEqual(self.controller.managed, {})
+        slot['windowTitle'] = ''
+        self.controller.reconcile()
+        self.assertEqual(self.controller.managed, {})

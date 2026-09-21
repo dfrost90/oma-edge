@@ -92,13 +92,18 @@ Ui.Panel {
         draft = {monitor: m.name, workspace: ws, workspaces: [ws], sourceIndices: [], enabled: true, side: "right", width: 20, fullBar: true, slots: []}
         dirty = true
     }
-    function addWindow(i) {
-        if (!draft || i < 0 || i >= windows.length) return
-        var c = windows[i]
+    function windowKey(c) {
+        return JSON.stringify([String(c.stableId || ""), c.address, c.pid])
+    }
+    function addWindow(key) {
+        if (!draft) return
+        var c = windows.find(function(w) { return root.windowKey(w) === key })
+        if (!c) { message = "That window has closed. Select an open window."; return }
         var slots = clone(draft.slots)
         if (slots.length >= 6) { message = "Maximum six app slots"; return }
         slots.push({id: "slot_" + Date.now() + "_" + slots.length, class: c.class,
-                    label: c.title || c.class, preferred: String(c.stableId || ""), weight: 1})
+                    label: c.title || c.class, preferred: String(c.stableId || ""),
+                    windowTitle: c.title || "", weight: 1})
         edit("slots", slots)
     }
     function slotAction(i, action) {
@@ -486,9 +491,9 @@ Ui.Panel {
                             triggerLabel: "+ Add an open window"
                             placeholderText: "Search apps and window titles…"
                             emptyText: "No matching open windows"
-                            options: root.windows.map(function(c, i) { return {value:String(i), label:c.title || c.class, description:c.class} })
+                            options: root.windows.map(function(c) { return {value:root.windowKey(c), label:c.title || c.class, description:c.class} })
                             enabled: root.draft !== null && root.draft.slots.length < 6
-                            onChanged: function(value) { root.addWindow(Number(value)) }
+                            onChanged: function(value) { root.addWindow(value) }
                         }
                         Caption {
                             Layout.fillWidth: true

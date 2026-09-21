@@ -6,7 +6,7 @@ const qml = fs.readFileSync(__dirname + '/../Panel.qml', 'utf8');
 const context = {config: {version:1, enabled:true, profiles:[{monitor:'DP-1',workspace:'1',enabled:true,width:12,side:'right',fullBar:true,slots:[{id:'telegram',class:'telegram',weight:1}]}]}, draft:null, profileIndex:0, dirty:false, message:''};
 context.root = context;
 vm.createContext(context);
-for (const name of ['clone','groupedProfiles','chooseWorkspaces','edit','save','addWindow']) {
+for (const name of ['clone','groupedProfiles','chooseWorkspaces','edit','save','addWindow','windowKey']) {
   const start = qml.indexOf('    function ' + name + '(');
   const end = qml.indexOf('\n    }', start) + 6;
   vm.runInContext(qml.slice(start,end), context);
@@ -47,8 +47,16 @@ context.windows = [
   {class: 'kitty', title: 'Nvim', stableId: '12'},
   {class: 'kitty', title: '', stableId: '13'}
 ];
-context.windows.forEach((_, i) => context.addWindow(i));
+const selectedKeys = context.windows.map(c => context.windowKey(c));
+context.windows.reverse(); // Snapshot order can change while the picker is open.
+selectedKeys.forEach(key => context.addWindow(key));
 assert.equal(context.draft.slots.map(s => s.label).join(','), 'Cliamp,Nvim,kitty');
 assert.ok(context.draft.slots.every(s => s.class === 'kitty'));
 assert.equal(context.draft.slots.map(s => s.preferred).join(','), '11,12,13');
 console.log('Workspace editing and window title label checks passed');
+
+assert.equal(context.draft.slots[0].windowTitle, 'Cliamp');
+context.windows = [];
+context.addWindow(selectedKeys[0]);
+assert.equal(context.draft.slots.length, 3);
+assert.match(context.message, /closed/);

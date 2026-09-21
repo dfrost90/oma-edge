@@ -84,7 +84,8 @@ def validate(data):
             if type(weight) not in (int, float) or not math.isfinite(weight) or not 1 <= weight <= 10:
                 raise ValueError('App height weight must be between 1 and 10')
             clean_slots.append({'id': ident, 'class': cls, 'label': str(s.get('label', cls))[:200],
-                                'weight': weight, 'preferred': str(s.get('preferred', ''))[:100]})
+                                'weight': weight, 'preferred': str(s.get('preferred', ''))[:100],
+                                'windowTitle': str(s.get('windowTitle', ''))[:4096]})
         result['profiles'].append({'monitor': monitor, 'workspace': workspace, 'enabled': p['enabled'],
                                    'width': width, 'side': p['side'], 'fullBar': p['fullBar'], 'slots': clean_slots})
         if 'group' in p:
@@ -228,6 +229,30 @@ class Controller:
     def identity(self, c):
         return str(c.get('stableId', '')) + ':' + str(c['pid']) + ':' + c['class']
 
+    def slot_candidates(self, slot, candidates, workspace):
+        # An explicit selection beats a stale binding after slots are reordered
+        # or replaced (the panel reuses positional slot IDs on save).
+        preferred = [c for c in candidates if slot['preferred'] and
+                     str(c.get('stableId', '')) == slot['preferred']]
+        bound = [c for c in candidates if c['address'] == self.bindings.get(slot['id']) and
+                 self.managed.get(c['address'], {}).get('identity') == self.identity(c)]
+        terminal = slot['class'].lower() in {
+            'kitty', 'alacritty', 'foot', 'footclient', 'ghostty',
+            'com.mitchellh.ghostty', 'wezterm', 'org.wezfurlong.wezterm',
+            'org.gnome.terminal', 'gnome-terminal', 'konsole', 'xterm', 'urxvt'}
+        if terminal:
+            if preferred:
+                return preferred
+            if bound:
+                return bound
+            # A closed terminal must not hand its slot to an unrelated shell.
+            title = slot.get('windowTitle', '')
+            matching = [c for c in candidates if title and c.get('title') == title]
+            return matching if len(matching) == 1 else []
+        return sorted(candidates, key=lambda c: (
+            c not in preferred, c not in bound,
+            workspace_key(c['workspace']) != workspace, c['address']))
+
     def restore(self, address, c):
         original = self.managed.get(address)
         if not original:
@@ -260,6 +285,7 @@ class Controller:
                 self.settle_at = None
             if config_reload:
                 self.reservations = {}
+                self.bindings = {}
             active = {m['name']: active_profile(self.config, m) for m in self.monitors}
             contexts = {}
             for m in self.monitors:
@@ -300,9 +326,7 @@ class Controller:
                 matched = []
                 for slot in p['slots']:
                     candidates = [c for c in by_class.get(slot['class'], []) if c['address'] not in used]
-                    candidates.sort(key=lambda c: (c['address'] != self.bindings.get(slot['id']),
-                                                    str(c.get('stableId', '')) != slot['preferred'],
-                                                    workspace_key(c['workspace']) != p['workspace'], c['address']))
+                    candidates = self.slot_candidates(slot, candidates, p['workspace'])
                     if not candidates:
                         continue
                     c = candidates[0]
@@ -416,6 +440,7 @@ class Controller:
                 atomic_json(CONFIG.with_suffix('.json.previous'), self.config)
             atomic_json(CONFIG, config)
             self.config = config
+            self.bindings = {}
             self.reconcile()
             if self.error:
                 error = self.error

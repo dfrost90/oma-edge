@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.4 — Keep terminal window selections distinct
+
+- Identify picker options by window identity instead of changing list positions.
+- Prefer the explicitly selected window over stale slot bindings.
+- Prevent terminal slots from claiming unrelated terminals when the selected app closes.
+  Reopened terminals require a unique exact match to the saved window title.
+- Clear stale bindings when saving or reloading profiles.
+
 ## 0.1.3 — Preserve selected window titles
 
 - Preserve the selected window title in app slot labels, so terminal apps such
