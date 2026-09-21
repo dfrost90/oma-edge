@@ -6,7 +6,7 @@ const qml = fs.readFileSync(__dirname + '/../Panel.qml', 'utf8');
 const context = {config: {version:1, enabled:true, profiles:[{monitor:'DP-1',workspace:'1',enabled:true,width:12,side:'right',fullBar:true,slots:[{id:'telegram',class:'telegram',weight:1}]}]}, draft:null, profileIndex:0, dirty:false, message:''};
 context.root = context;
 vm.createContext(context);
-for (const name of ['clone','groupedProfiles','chooseWorkspaces','edit','save']) {
+for (const name of ['clone','groupedProfiles','chooseWorkspaces','edit','save','addWindow']) {
   const start = qml.indexOf('    function ' + name + '(');
   const end = qml.indexOf('\n    }', start) + 6;
   vm.runInContext(qml.slice(start,end), context);
@@ -41,4 +41,14 @@ context.chooseWorkspaces(['4']);
 context.save(false);
 assert.equal(context.sent, null);
 assert.match(context.message, /already has a profile/);
-console.log('Workspace grouping, removal, unique slots, All exclusivity, empty selection and conflict checks passed');
+context.draft = {slots: []};
+context.windows = [
+  {class: 'kitty', title: 'Cliamp', stableId: '11'},
+  {class: 'kitty', title: 'Nvim', stableId: '12'},
+  {class: 'kitty', title: '', stableId: '13'}
+];
+context.windows.forEach((_, i) => context.addWindow(i));
+assert.equal(context.draft.slots.map(s => s.label).join(','), 'Cliamp,Nvim,kitty');
+assert.ok(context.draft.slots.every(s => s.class === 'kitty'));
+assert.equal(context.draft.slots.map(s => s.preferred).join(','), '11,12,13');
+console.log('Workspace editing and window title label checks passed');

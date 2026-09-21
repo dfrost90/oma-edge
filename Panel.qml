@@ -98,7 +98,7 @@ Ui.Panel {
         var slots = clone(draft.slots)
         if (slots.length >= 6) { message = "Maximum six app slots"; return }
         slots.push({id: "slot_" + Date.now() + "_" + slots.length, class: c.class,
-                    label: c.class, preferred: String(c.stableId || ""), weight: 1})
+                    label: c.title || c.class, preferred: String(c.stableId || ""), weight: 1})
         edit("slots", slots)
     }
     function slotAction(i, action) {

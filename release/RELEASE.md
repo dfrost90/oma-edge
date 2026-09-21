@@ -1,10 +1,16 @@
-# Oma Edge 0.1.2 release preparation
+# Oma Edge 0.1.3 release preparation
 
 Status: initial preview release; see GitHub and the marketplace issue for current publication status.
 Repository: `https://github.com/dfrost90/oma-edge`.
 Keep plugin ID `io.github.dfrost90.edge-strip` stable for existing installations.
 
-## Validation completed
+## 0.1.3 patch validation
+
+- Full Python, Node, and Lua checks pass, including window-title labels and empty-title fallback.
+- Existing saved labels require removing and re-adding the app. Class-based matching is unchanged.
+- Live desktop checks below describe earlier preview validation, not a new 0.1.3 desktop run.
+
+## Preview validation completed
 
 - 26 Python tests: geometry, validation, restoration, save rollback, install preflight and rollback.
 - Node tests: grouped profile persistence, unique slots, deselection, All, empty selection, conflicts.
@@ -22,7 +28,7 @@ live desktop checks require an Omarchy session and are not claimed by generic CI
 
 1. Confirm the public repository name and review the README, MIT license, preview,
    and submission checklist. `preview.png` contains only the panel.
-2. Create/push the public repository and run its CI. Tag the tested commit `v0.1.2`
+2. Create/push the public repository and run its CI. Tag the tested commit `v0.1.3`
    and describe it as an initial preview release. Do not claim multi-monitor hardware validation.
 3. Verify a clean installation on Omarchy: plugin add, explicit `install.py --check`,
    `install.py`, UI launch, disable/re-enable, `uninstall.py`. Setup performs user

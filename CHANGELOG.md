@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.3 — Preserve selected window titles
+
+- Preserve the selected window title in app slot labels, so terminal apps such
+  as Cliamp and Nvim are not relabeled as their terminal class (for example, kitty).
+- Existing slots retain their saved labels; remove and re-add them to capture the title.
+  Class-based matching on reopen is unchanged.
+
 ## 0.1.2 — Preserve gaps around minimum-size apps
 
 - Respect minimum app heights such as Telegram’s instead of overlapping the next tile.
