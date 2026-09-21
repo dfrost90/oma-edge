@@ -13,7 +13,7 @@ Configure it from a bar panel. No compiled compositor plugin is needed.
 - Width from 10–45%, left or right placement, up to six app slots.
 - Pick running windows, reorder them, and adjust relative heights (1–10).
 - Remember app classes and reclaim slots when apps reopen.
-- Choose a full-width horizontal bar or a bar above just the layout area.
+- Keep the horizontal bar full-width without resizing it on workspace switches.
 - Disable the strip or remove assignments to restore the windows' recorded
   workspace, floating/pinned state, and floating geometry.
 - Workspace changes and window openings are handled through Hyprland's event
@@ -70,6 +70,14 @@ compatible clone is preserved and adapted in place. Setup preflights compatibili
 fails. Original files are backed
 up under `~/.config/omarchy/edge-strip-backups/<timestamp>/`.
 
+## Updating the bar adapter
+
+After updating from 0.1.4 or earlier, rerun `python3 install.py` to replace the old
+margin adapter in your local bar clone. Setup backs up the file before changing it.
+The new adapter keeps the visible bar independent of strip reservations and uses
+an input-transparent surface to reserve its height. The old `fullBar` profile
+setting is ignored; horizontal bars are always full-width.
+
 ## Use
 
 Click the Oma Edge icon in the bar, or run:
@@ -91,7 +99,7 @@ omarchy-shell edge-strip open
 3. Choose a side and width. Pick open windows with **Add an open window**, reorder with the
    arrows, and set height weights. A 1:2 pair gives the second app twice the
    height of the first.
-4. Select **Full-width top bar** if desired, then **Apply**.
+4. Click **Apply**. The horizontal bar always spans the full screen.
 
 Changes stay in the panel until Apply, except for the global enable switch,
 which applies immediately. Discard restores the selected saved profile.
@@ -130,7 +138,7 @@ windows for sites such as YouTube.
 
 - `~/.config/omarchy/edge-strip.json`: versioned profiles, source of truth.
 - `edge-strip.json.previous`: configuration before the last successful save attempt.
-- `$XDG_RUNTIME_DIR/omarchy-edge-strip/`: local control socket, bar state, and
+- `$XDG_RUNTIME_DIR/omarchy-edge-strip/`: local control socket, controller state, and
   window recovery journal, limited to the current login/session.
 - `bridge.lua`: captures monitor rules before they are applied and adds strip
   reservations to their original values. Mode, scale, position, VRR, color
@@ -160,7 +168,7 @@ optional. Use the uninstall script before deleting the source.
 
 ## Limits
 
-- Bar compensation supports horizontal Omarchy bars. The local clone does not
+- Full-width integration supports horizontal Omarchy bars. The local clone does not
   automatically inherit future upstream bar changes; refresh/rebase that clone
   deliberately when updating Omarchy, then rerun the installer.
 - True fullscreen can cover the strip. Fullscreen and grouped windows aren't
@@ -198,7 +206,7 @@ License: MIT.
 
 ## Release status
 
-Version 0.1.4 is a preview release. See [CHANGELOG.md](CHANGELOG.md)
+Version 0.1.5 is a preview release. See [CHANGELOG.md](CHANGELOG.md)
 and [release/RELEASE.md](release/RELEASE.md) for verification and publication steps.
 The persistent plugin ID remains `io.github.dfrost90.edge-strip` for upgrade
 compatibility; Oma Edge is its display name. Node.js and Lua are development

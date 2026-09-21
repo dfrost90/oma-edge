@@ -11,6 +11,8 @@ spec.loader.exec_module(installer)
 BAR = '''Item {
   id: root
   component BarPanel: PanelWindow {
+    id: barWindow
+    exclusionMode: root.barHidden ? ExclusionMode.Ignore : ExclusionMode.Auto
     margins {
       left: root.barHidden && root.position === "left" ? -root.barSize : 0
       right: root.barHidden && root.position === "right" ? -root.barSize : 0
@@ -22,10 +24,18 @@ BAR = '''Item {
 class InstallTests(unittest.TestCase):
     def test_adapter_is_idempotent_and_exactly_reversible(self):
         adapted = installer.render_bar_adapter(BAR)
-        self.assertIn('root.edgeStripMargin', adapted)
+        self.assertIn('omarchy-edge-bar-reservation', adapted)
+        self.assertNotIn('edgeStripMargin', adapted)
+        self.assertNotIn('FileView', adapted)
         self.assertEqual(installer.render_bar_adapter(adapted), adapted)
         self.assertEqual(installer.remove_bar_adapter(adapted), BAR)
         self.assertEqual(installer.remove_bar_adapter(BAR), BAR)
+
+    def test_upgrade_removes_legacy_watcher_and_remains_reversible(self):
+        legacy = (Path(__file__).parent/'fixtures/legacy_bar.qml').read_text()
+        upgraded = installer.render_bar_adapter(legacy)
+        self.assertEqual(upgraded, installer.render_bar_adapter(BAR))
+        self.assertEqual(installer.remove_bar_adapter(upgraded), BAR)
 
     def test_incompatible_bar_is_rejected(self):
         with self.assertRaises(SystemExit):

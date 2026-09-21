@@ -89,7 +89,7 @@ Ui.Panel {
         var existing = profiles.findIndex(function(p) { return p.monitor === m.name && p.workspaces.indexOf(ws) >= 0 })
         if (existing >= 0) { selectProfile(existing); return }
         profileIndex = -1
-        draft = {monitor: m.name, workspace: ws, workspaces: [ws], sourceIndices: [], enabled: true, side: "right", width: 20, fullBar: true, slots: []}
+        draft = {monitor: m.name, workspace: ws, workspaces: [ws], sourceIndices: [], enabled: true, side: "right", width: 20, slots: []}
         dirty = true
     }
     function windowKey(c) {
@@ -417,9 +417,9 @@ Ui.Panel {
                             readonly property real stripWidth: (width - Style.space(12)) * (root.draft ? root.draft.width / 100 : 0.2)
                             readonly property bool onLeft: root.draft && root.draft.side === "left"
                             Rectangle {
-                                x: Style.space(6) + (preview.onLeft && root.draft && !root.draft.fullBar ? preview.stripWidth : 0)
+                                x: Style.space(6)
                                 y: Style.space(6)
-                                width: preview.width - Style.space(12) - (root.draft && !root.draft.fullBar ? preview.stripWidth : 0)
+                                width: preview.width - Style.space(12)
                                 height: Style.space(5)
                                 color: Color.foreground; opacity: 0.5
                             }
@@ -453,13 +453,6 @@ Ui.Panel {
                                     }
                                 }
                             }
-                        }
-                        Ui.Toggle {
-                            Layout.fillWidth: true
-                            label: "Full-width top bar"
-                            description: checked ? "Span the layout and reserved strip." : "Stay above the layout area only."
-                            checked: root.draft ? root.draft.fullBar : false
-                            onClicked: root.edit("fullBar", !checked)
                         }
                         Ui.PanelSeparator { Layout.fillWidth: true }
                         RowLayout {

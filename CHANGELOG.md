@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.5 — Stable full-width bar
+
+- Keep horizontal bars full-width and remove the full-width toggle.
+- Separate bar drawing from its height reservation to eliminate the transient
+  shrink when workspace strip reservations change. No state watcher or delayed
+  margin compensation is needed.
+- Upgrade older bar adapters reversibly when rerunning `python3 install.py`.
+- Accept older profiles while dropping the obsolete `fullBar` setting.
+- Live checks confirm stable bar geometry and surface identity through workspace
+  switches, correct left/right reservations, and cleanup when disabled.
+
 ## 0.1.4 — Keep terminal window selections distinct
 
 - Identify picker options by window identity instead of changing list positions.

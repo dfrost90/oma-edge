@@ -24,7 +24,7 @@ def save(config):
 def focus(ws):
     h.run('eval', 'hl.dispatch(hl.dsp.focus({workspace=' + e.lua_string(ws) + '}))')
 
-def check(label, left=0, right=0, full=True):
+def check(label, left=0, right=0):
     deadline = time.monotonic() + 6
     last = None
     while time.monotonic() < deadline:
@@ -33,7 +33,7 @@ def check(label, left=0, right=0, full=True):
         layers = h.read('layers')[name]['levels']
         bar = next((l for group in layers.values() for l in group if l['namespace'] == 'omarchy-bar'), None)
         last = (m['reserved'], bar, state['error'])
-        expected_bar = e.logical_size(m)[0] - base_left - base_right - (0 if full else left + right)
+        expected_bar = e.logical_size(m)[0]
         if (not state['error'] and m['reserved'][0] == base_left + left
                 and m['reserved'][2] == base_right + right and bar and bar['w'] == expected_bar):
             assert abs(m['refreshRate'] - monitor['refreshRate']) < .1
@@ -42,25 +42,41 @@ def check(label, left=0, right=0, full=True):
         time.sleep(.15)
     raise AssertionError((label, last))
 
+def switch_without_bar_resize(ws):
+    def bar():
+        layers = h.read('layers')[name]['levels']
+        return next(l for group in layers.values() for l in group if l['namespace'] == 'omarchy-bar')
+    before = bar()
+    expected = (before['address'], before['x'], before['y'], before['w'], before['h'])
+    focus(ws)
+    deadline = time.monotonic() + .5
+    samples = 0
+    while time.monotonic() < deadline:
+        current = bar()
+        actual = (current['address'], current['x'], current['y'], current['w'], current['h'])
+        assert actual == expected, ('Bar resized or remapped on workspace switch', expected, actual)
+        samples += 1
+        time.sleep(.01)
+    print(f'Workspace {ws}: bar geometry and surface stable across {samples} samples', flush=True)
+
 try:
     cfg = copy.deepcopy(original['config'])
     active = e.active_profile(cfg, monitor)
     profile = copy.deepcopy(active) if active else {'slots': []}
     profile.pop('group', None)
-    profile.update(monitor=name, workspace=original_ws, enabled=True, width=20, side='right', fullBar=True)
+    profile.update(monitor=name, workspace=original_ws, enabled=True, width=20, side='right')
     cfg['profiles'] = [p for p in cfg['profiles'] if p['monitor'] != name] + [profile]
     cfg['enabled'] = True
     width = round(e.logical_size(monitor)[0] * .2)
     save(cfg)
     check('Right strip / full bar', right=width)
-    focus(probe_ws)
+    switch_without_bar_resize(probe_ws)
     check('Unconfigured workspace releases strip')
-    focus(original_ws)
+    switch_without_bar_resize(original_ws)
     check('Returning restores strip', right=width)
     profile['side'] = 'left'
-    profile['fullBar'] = False
     save(cfg)
-    check('Left strip / layout-width bar', left=width, full=False)
+    check('Left strip / full bar', left=width)
     cfg['enabled'] = False
     save(cfg)
     check('Disable releases strip')

@@ -65,8 +65,8 @@ def validate(data):
             raise ValueError('Strip width must be between 10% and 45%')
         if p.get('side') not in ('left', 'right'):
             raise ValueError('Choose left or right')
-        if type(p.get('enabled')) is not bool or type(p.get('fullBar')) is not bool:
-            raise ValueError('Expected enabled and fullBar flags')
+        if type(p.get('enabled')) is not bool:
+            raise ValueError('Expected enabled flag')
         slots = p.get('slots', [])
         if not isinstance(slots, list) or len(slots) > 6:
             raise ValueError('A strip supports up to six app slots')
@@ -87,7 +87,7 @@ def validate(data):
                                 'weight': weight, 'preferred': str(s.get('preferred', ''))[:100],
                                 'windowTitle': str(s.get('windowTitle', ''))[:4096]})
         result['profiles'].append({'monitor': monitor, 'workspace': workspace, 'enabled': p['enabled'],
-                                   'width': width, 'side': p['side'], 'fullBar': p['fullBar'], 'slots': clean_slots})
+                                   'width': width, 'side': p['side'], 'slots': clean_slots})
         if 'group' in p:
             group = p['group']
             if not isinstance(group, str) or not re.fullmatch('[A-Za-z0-9_-]{1,80}', group):
@@ -407,9 +407,8 @@ class Controller:
     def publish(self):
         bars = {}
         for m in self.monitors:
-            p = active_profile(self.config, m)
             left, right = self.reservations.get(m['name'], (0, 0))
-            bars[m['name']] = {'left': left, 'right': right, 'fullBar': bool(p and p['fullBar'])}
+            bars[m['name']] = {'left': left, 'right': right}
         state = {'config': self.config, 'monitors': self.monitors, 'clients': self.clients,
                  'workspaces': self.workspaces, 'bars': bars, 'error': self.config_error or self.error, 'bindings': self.bindings}
         if state != self.last_state:

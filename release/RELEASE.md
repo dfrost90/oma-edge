@@ -1,47 +1,32 @@
-# Oma Edge 0.1.4 release preparation
+# Oma Edge 0.1.5
 
-Status: initial preview release; see GitHub and the marketplace issue for current publication status.
-Repository: `https://github.com/dfrost90/oma-edge`.
-Keep plugin ID `io.github.dfrost90.edge-strip` stable for existing installations.
+Repository: https://github.com/dfrost90/oma-edge
+Plugin ID: `io.github.dfrost90.edge-strip`
 
-## 0.1.4 patch validation
+## Changes
 
-- Full Python, Node, and Lua checks pass, including window-title labels and empty-title fallback.
-- Existing saved labels require removing and re-adding the app. Terminal matching requires the selected identity or a unique saved title on reopen.
-- Live desktop checks below describe earlier preview validation, not a new 0.1.4 desktop run.
+Horizontal bars stay full-width. A transparent, input-transparent surface reserves
+bar height independently of the visible bar, removing the state watcher and
+negative-margin compensation. The panel no longer offers a full-width toggle.
+Older profile settings are accepted and normalized without `fullBar`.
 
-## Preview validation completed
+## Upgrade
 
-- 29 Python tests: geometry, validation, restoration, save rollback, install preflight and rollback.
-- Node tests: grouped profile persistence, unique slots, deselection, All, empty selection, conflicts.
-- Lua bridge tests and parser check.
-- Omarchy manifest validation and installer `--check`.
-- Live desktop smoke test: right/full-width bar, workspace leave/return, left/layout-width bar, disable; original settings restored.
-- Live close/reopen test: thirds → halves → thirds, allowing one-pixel compositor rounding.
-- Panel loaded after refactor; preview captured with no other application content.
-- Hyprland reports no configuration errors.
+Existing users must rerun `python3 install.py` after updating to migrate their
+local bar adapter. Setup backs up the clone and uninstall removes the adapter.
 
-GitHub Actions runs Python, Node, and Lua checks. Omarchy manifest validation and
-live desktop checks require an Omarchy session and are not claimed by generic CI.
+## Validation
 
-## Before publishing
+- 31 Python tests, Node panel tests, Lua bridge tests and syntax checks pass.
+- Adapter upgrade is idempotent and exactly reversible against a legacy fixture.
+- Live desktop checks pass for right and left strips, workspace leave/return,
+  and disabling the strip; original settings and focus restored.
+- The same full-width bar surface and geometry persisted across 86 samples
+  spanning both workspace transitions. No Hyprland configuration errors.
+- Physical multi-monitor hotplug remains unverified.
 
-1. Confirm the public repository name and review the README, MIT license, preview,
-   and submission checklist. `preview.png` contains only the panel.
-2. Create/push the public repository and run its CI. Tag the tested commit `v0.1.4`
-   and describe it as an initial preview release. Do not claim multi-monitor hardware validation.
-3. Verify a clean installation on Omarchy: plugin add, explicit `install.py --check`,
-   `install.py`, UI launch, disable/re-enable, `uninstall.py`. Setup performs user
-   configuration edits and needs a **manual-setup** marketplace listing.
-4. Use `release/submission.md` as the issue body and `[Plugin]: Oma Edge` as title.
-   Replace the proposed URL if needed and confirm every unchecked statement.
-5. After owner approval, submit to `omacom/omarchy-plugin-marketplace` using the
-   exact issue format. Wait for exact-commit validation and maintainer approval.
+## Publication
 
-The local archive is a convenience artifact. The marketplace validates the public
-GitHub repository commit, not this archive.
-
-## References
-
-- https://plugins.omarchy.org/publish.html
-- https://github.com/omacom/omarchy-plugin-marketplace/blob/main/SUBMISSION.md
+Publish the tested commit as preview tag `v0.1.5` with the archive and checksum
+from `scripts/package.sh`. Keep the marketplace issue body synchronized with
+`release/submission.md`; manual setup still requires maintainer review.

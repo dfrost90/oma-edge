@@ -20,6 +20,16 @@ def monitor(**kw):
     return m
 
 class ModelTests(unittest.TestCase):
+    def test_legacy_full_bar_setting_is_ignored_and_no_longer_required(self):
+        for legacy in (True, False, None):
+            p = profile()
+            if legacy is None:
+                p.pop('fullBar')
+            else:
+                p['fullBar'] = legacy
+            clean = e.validate({'version': 1, 'enabled': True, 'profiles': [p]})
+            self.assertNotIn('fullBar', clean['profiles'][0])
+
     def test_workspace_groups_round_trip_and_select(self):
         first = profile(group='group_demo')
         second = profile(workspace='3', group='group_demo')
