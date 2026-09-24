@@ -198,3 +198,45 @@ class TerminalSelectionTests(unittest.TestCase):
         slot['windowTitle'] = ''
         self.controller.reconcile()
         self.assertEqual(self.controller.managed, {})
+
+    def reopened_terminal_with_changed_title(self):
+        self.configure()
+        self.controller.config['profiles'][0]['slots'][0]['preferred'] = 'old-window'
+        self.controller.reconcile()
+        self.cliamp['title'] = 'Playing a different track | cliamp'
+
+    def test_adding_and_reordering_slots_keeps_reopened_terminal(self):
+        self.reopened_terminal_with_changed_title()
+        other = dict(client('localsend', 3), title='LocalSend')
+        self.hypr.clients.append(other)
+        config = copy.deepcopy(self.controller.config)
+        terminal = config['profiles'][0]['slots'][0]
+        terminal['id'] = 'new_position_1'
+        terminal['weight'] = 2
+        config['profiles'][0]['slots'].insert(0, {
+            'id': 'new_position_0', 'class': 'localsend', 'preferred': '3', 'weight': 1})
+        result = self.controller.request({'action': 'save', 'config': config})
+        self.assertTrue(result['ok'], result)
+        self.assertEqual(set(self.controller.managed), {self.cliamp['address'], other['address']})
+        self.assertEqual(self.controller.bindings['new_position_1'], self.cliamp['address'])
+        self.controller.reconcile(config_reload=True)
+        self.assertEqual(set(self.controller.managed), {self.cliamp['address'], other['address']})
+
+    def test_replacing_selection_does_not_retain_old_terminal(self):
+        self.reopened_terminal_with_changed_title()
+        config = copy.deepcopy(self.controller.config)
+        slot = config['profiles'][0]['slots'][0]
+        slot.update(preferred='1', windowTitle='tmux nvim')
+        self.assertTrue(self.controller.request({'action': 'save', 'config': config})['ok'])
+        self.assertEqual(set(self.controller.managed), {self.nvim['address']})
+
+    def test_restart_preserves_identity_checked_terminal_binding(self):
+        self.reopened_terminal_with_changed_title()
+        e.atomic_json(e.CONFIG, self.controller.config)
+        restarted = e.Controller(self.hypr)
+        restarted.load()
+        restarted.reconcile()
+        self.assertEqual(set(restarted.managed), {self.cliamp['address']})
+        self.cliamp['pid'] += 100
+        restarted.reconcile()
+        self.assertEqual(restarted.managed, {})

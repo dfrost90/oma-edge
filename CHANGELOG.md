@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — Keep existing apps when applying edits
+
+- Preserve live window bindings for unchanged selections when adding, reordering,
+  or resizing slots, even when the panel regenerates slot IDs.
+- Retain identity-checked bindings across controller and compositor reloads.
+- Keep terminal matching strict: a changed selection or reused window identity
+  does not inherit the previous terminal binding.
+
 ## 0.1.6 — Bar-independent reservations
 
 - Reserve strip space with the plugin's own input-transparent Overlay surfaces.

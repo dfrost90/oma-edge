@@ -229,6 +229,7 @@ class Controller:
         self.reservations = {}
         self.managed = {}
         self.bindings = {}
+        self.saved_bindings = {}
         self.minimum_heights = {}
         self.size_requests = {}
         self.settle_at = None
@@ -243,15 +244,37 @@ class Controller:
             saved = json.loads(self.journal_path.read_text())
             if saved.get('session') == os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'):
                 self.managed = saved.get('managed', {})
+                self.saved_bindings = saved.get('slot_bindings', {})
                 self.reservations = {k: tuple(v) for k, v in saved.get('reservations', {}).items()}
 
     def load(self):
-        self.config = validate(json.loads(CONFIG.read_text())) if CONFIG.exists() else copy.deepcopy(DEFAULT)
+        self.set_config(validate(json.loads(CONFIG.read_text())) if CONFIG.exists() else copy.deepcopy(DEFAULT))
         self.config_error = ''
+
+    @staticmethod
+    def slot_key(profile, slot):
+        # Panel saves regenerate positional IDs. Match the selection itself,
+        # not its position, label, or height, when retaining a live window.
+        return json.dumps([profile['monitor'], profile['workspace'], slot['class'],
+                           slot['preferred'], slot.get('windowTitle', '')])
+
+    def binding_selections(self):
+        return {self.slot_key(p, s): self.bindings[s['id']]
+                for p in self.config['profiles'] for s in p['slots']
+                if s['id'] in self.bindings}
+
+    def set_config(self, config):
+        previous = {**self.saved_bindings, **self.binding_selections()}
+        self.saved_bindings = {}
+        self.bindings = {s['id']: previous[self.slot_key(p, s)]
+                         for p in config['profiles'] for s in p['slots']
+                         if self.slot_key(p, s) in previous}
+        self.config = config
 
     def journal(self):
         atomic_json(self.journal_path, {'session': os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'),
-                                     'managed': self.managed, 'reservations': self.reservations})
+                                     'managed': self.managed, 'reservations': self.reservations,
+                                     'slot_bindings': self.binding_selections()})
 
     def identity(self, c):
         return str(c.get('stableId', '')) + ':' + str(c['pid']) + ':' + c['class']
@@ -311,8 +334,6 @@ class Controller:
             self.refresh()
             if self.settle_at is not None and time.monotonic() >= self.settle_at:
                 self.settle_at = None
-            if config_reload:
-                self.bindings = {}
             active = {m['name']: active_profile(self.config, m) for m in self.monitors}
             contexts = {}
             for m in self.monitors:
@@ -425,6 +446,8 @@ class Controller:
             for address in list(self.managed):
                 if address not in used:
                     self.restore(address, by_address.get(address))
+            self.bindings = {key: address for key, address in self.bindings.items() if address in used}
+            self.journal()
             self.error = ''
             self.refresh()
         except Exception as exc:
@@ -462,15 +485,16 @@ class Controller:
                 if config['enabled'] and p['enabled'] and m:
                     geometry(m, p, self.reservations.get(m['name'], (0, 0)))
             previous = copy.deepcopy(self.config)
+            previous_bindings = dict(self.bindings)
             if CONFIG.exists():
                 atomic_json(CONFIG.with_suffix('.json.previous'), self.config)
             atomic_json(CONFIG, config)
-            self.config = config
-            self.bindings = {}
+            self.set_config(config)
             self.reconcile()
             if self.error:
                 error = self.error
                 self.config = previous
+                self.bindings = previous_bindings
                 atomic_json(CONFIG, previous)
                 self.reconcile()
                 return {'ok': False, 'error': error + ' (previous settings restored)'}
