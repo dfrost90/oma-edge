@@ -26,8 +26,9 @@ apps automatically; open the apps you want, then assign them from the panel.
 
 Omarchy Quattro (tested on 4.0.4), Hyprland's Lua configuration and typed dispatcher API (tested on
 0.56.2), Python 3, Quickshell, and the standard Omarchy shell. Full-width bar
-support requires Omarchy's bar or a compatible local clone. A third-party bar
-with different source needs its own integration.
+support works with the standard Omarchy bar without a clone.
+Other horizontal bars on the normal Top layer also use this mechanism; bars
+that reserve space on the Overlay layer may behave differently.
 
 ## Installation (manual setup required)
 
@@ -39,14 +40,14 @@ omarchy plugin add https://github.com/dfrost90/oma-edge --enable
 
 After adding the plugin,
 run the explicit setup step below. Enabling the plugin alone does **not** edit
-Hyprland or install the bar adapter:
+Hyprland configuration:
 
 ```bash
 python3 "${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/io.github.dfrost90.edge-strip/install.py" --check
 python3 "${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/io.github.dfrost90.edge-strip/install.py"
 ```
 
-The setup command changes your user Hyprland configuration and local bar clone
+The setup command installs a layout-event hook in your user Hyprland configuration
 as described below. Review those changes before running it. No root access,
 package downloads, or network access are needed by the plugin.
 
@@ -59,24 +60,24 @@ python3 install.py
 
 The installer links this checkout into
 `~/.config/omarchy/plugins/io.github.dfrost90.edge-strip`, installs a guarded
-bridge loader at the beginning of `~/.config/hypr/hyprland.lua`, enables the
+layout-event bridge loader at the beginning of `~/.config/hypr/hyprland.lua`, enables the
 plugin, and restarts the shell. Keep the checkout in place while using it.
 Running the installer from a plugin already checked out at that destination
 also works.
 
-The bar adapter modifies only a local bar clone. If the stock bar is selected,
-the installer first uses `omarchy plugin clone omarchy.bar`. An existing
-compatible clone is preserved and adapted in place. Setup preflights compatibility and restores changed configuration if a later step
-fails. Original files are backed
-up under `~/.config/omarchy/edge-strip-backups/<timestamp>/`.
+The installer keeps your selected bar and does not clone or patch it. Oma Edge's
+service owns transparent, input-transparent side surfaces that reserve space
+for app windows after Hyprland places the normal top-layer bar. The bar retains
+its full width and its normal service access, including for plugins like OmaChat.
+Setup preflights requirements and restores changed configuration if a later step
+fails. Backups are kept under `~/.config/omarchy/edge-strip-backups/<timestamp>/`.
 
-## Updating the bar adapter
+## Upgrading from the bar adapter
 
-After updating from 0.1.4 or earlier, rerun `python3 install.py` to replace the old
-margin adapter in your local bar clone. Setup backs up the file before changing it.
-The new adapter keeps the visible bar independent of strip reservations and uses
-an input-transparent surface to reserve its height. The old `fullBar` profile
-setting is ignored; horizontal bars are always full-width.
+Rerun `python3 install.py` to reload the reservation service and remove old Oma
+Edge adapter blocks from local bar clones (with backups). Your selected bar is
+preserved. To return to the standard bar, use `omarchy plugin enable omarchy.bar`.
+The old `fullBar` profile setting is still ignored.
 
 ## Use
 
@@ -140,14 +141,14 @@ windows for sites such as YouTube.
 - `edge-strip.json.previous`: configuration before the last successful save attempt.
 - `$XDG_RUNTIME_DIR/omarchy-edge-strip/`: local control socket, controller state, and
   window recovery journal, limited to the current login/session.
-- `bridge.lua`: captures monitor rules before they are applied and adds strip
-  reservations to their original values. Mode, scale, position, VRR, color
-  settings, and pre-existing reservations are preserved.
+- `reservations.json` in the runtime directory: controller requests consumed by
+  the service's side surfaces. Requests are scoped to the current compositor session.
+- `bridge.lua`: notifies the controller when monitor geometry or layer reservations
+  change. It does not wrap or modify monitor rules.
 
-The Lua bridge must load **before** monitor configuration. It wraps
-`hl.monitor` to remember the complete user rules; only plugin reservations call
-the original function directly. A Hyprland reload rebuilds the captured rules,
-and the controller reapplies the active profiles.
+The controller waits for the compositor to apply side reservations before laying
+out apps. Surfaces disappear when the shell/service stops. Existing monitor
+settings and reservations remain under your control.
 
 ```bash
 python3 backend.py request '{"action":"status"}'
@@ -161,16 +162,16 @@ windows. For complete integration removal:
 python3 uninstall.py
 ```
 
-This disables the plugin, removes its Lua loader and bar adapter, and reloads
+This disables the plugin, removes its Lua loader and any legacy bar adapters, and reloads
 Hyprland/the shell. It keeps the checkout, profiles, backups, and your local bar
 clone. Afterwards, `omarchy plugin remove io.github.dfrost90.edge-strip` is
 optional. Use the uninstall script before deleting the source.
 
 ## Limits
 
-- Full-width integration supports horizontal Omarchy bars. The local clone does not
-  automatically inherit future upstream bar changes; refresh/rebase that clone
-  deliberately when updating Omarchy, then rerun the installer.
+- Full-width integration is verified with the standard horizontal Omarchy bar.
+  No custom clone is required, so upstream bar updates remain available. Arbitrary
+  third-party bars (especially Overlay-layer bars) are not guaranteed compatible.
 - True fullscreen can cover the strip. Fullscreen and grouped windows aren't
   offered as new assignments. The controller doesn't close applications.
 - Windows are floating. Apply, workspace switches, and relevant compositor
@@ -206,7 +207,7 @@ License: MIT.
 
 ## Release status
 
-Version 0.1.5 is a preview release. See [CHANGELOG.md](CHANGELOG.md)
+This checkout is version 0.1.6, a preview with bar-independent reservations. See [CHANGELOG.md](CHANGELOG.md)
 and [release/RELEASE.md](release/RELEASE.md) for verification and publication steps.
 The persistent plugin ID remains `io.github.dfrost90.edge-strip` for upgrade
 compatibility; Oma Edge is its display name. Node.js and Lua are development

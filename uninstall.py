@@ -32,13 +32,7 @@ def main():
     text = hypr.read_text()
     text = re.sub(r'-- Edge Strip monitor bridge \(must precede monitor configuration\)\n[^\n]+\n\n?', '', text)
     install.write(hypr, text)
-    shell = json.loads((install.CFG/'omarchy/shell.json').read_text())
-    bar_id = shell.get('bar', {}).get('id', '')
-    bar_file = install.CFG/'omarchy/plugins'/bar_id/'Bar.qml'
-    if bar_file.is_file():
-        text = bar_file.read_text()
-        text = install.remove_bar_adapter(text)
-        install.write(bar_file, text)
+    install.remove_legacy_bar_adapters()
     install.run('hyprctl', 'reload')
     errors = install.run('hyprctl', 'configerrors').strip()
     if errors:

@@ -22,24 +22,22 @@ BAR = '''Item {
 '''
 
 class InstallTests(unittest.TestCase):
-    def test_adapter_is_idempotent_and_exactly_reversible(self):
-        adapted = installer.render_bar_adapter(BAR)
-        self.assertIn('omarchy-edge-bar-reservation', adapted)
-        self.assertNotIn('edgeStripMargin', adapted)
-        self.assertNotIn('FileView', adapted)
-        self.assertEqual(installer.render_bar_adapter(adapted), adapted)
-        self.assertEqual(installer.remove_bar_adapter(adapted), BAR)
+    def test_legacy_adapter_removal_is_exact_and_idempotent(self):
+        legacy = (Path(__file__).parent/'fixtures/legacy_bar.qml').read_text()
+        self.assertEqual(installer.remove_bar_adapter(legacy), BAR)
         self.assertEqual(installer.remove_bar_adapter(BAR), BAR)
 
-    def test_upgrade_removes_legacy_watcher_and_remains_reversible(self):
-        legacy = (Path(__file__).parent/'fixtures/legacy_bar.qml').read_text()
-        upgraded = installer.render_bar_adapter(legacy)
-        self.assertEqual(upgraded, installer.render_bar_adapter(BAR))
-        self.assertEqual(installer.remove_bar_adapter(upgraded), BAR)
-
-    def test_incompatible_bar_is_rejected(self):
-        with self.assertRaises(SystemExit):
-            installer.render_bar_adapter(BAR.replace('      left:', '      horizontal:'))
+    def test_setup_accepts_standard_or_unrelated_custom_bar(self):
+        with tempfile.TemporaryDirectory() as directory:
+            config = Path(directory)
+            (config/'hypr').mkdir()
+            (config/'omarchy').mkdir()
+            (config/'hypr/hyprland.lua').write_text('-- config')
+            for bar in ('omarchy.bar', 'unrelated.custom-bar'):
+                (config/'omarchy/shell.json').write_text('{"bar":{"id":"'+bar+'"}}')
+                with patch.object(installer, 'CFG', config), patch.object(installer.shutil, 'which', return_value='/bin/tool'):
+                    installer.preflight()
+                self.assertFalse((config/'omarchy/plugins').exists())
 
     def test_conflicting_installation_is_rejected_without_writes(self):
         with tempfile.TemporaryDirectory() as directory:

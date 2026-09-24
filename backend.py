@@ -174,8 +174,35 @@ class Hypr:
         return json.loads(p.stdout)
 
     def reserve(self, name, left, right):
-        self.run('eval', 'assert(omarchy_edge_strip, "Oma Edge bridge is not installed"); '
-                 f'omarchy_edge_strip.reserve({lua_string(name)}, {int(left)}, {int(right)})')
+        before = self.reservations()
+        desired = dict(before, **{name: (int(left), int(right))})
+        def publish(values):
+            atomic_json(RUNTIME/'reservations.json', {
+                'session': os.environ.get('HYPRLAND_INSTANCE_SIGNATURE', ''),
+                'monitors': values,
+            })
+        publish(desired)
+        # Layer surfaces are configured asynchronously. Do not lay out windows
+        # against a reservation until the compositor has applied it.
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            if self.reservations().get(name, (0, 0)) == (left, right):
+                return
+            time.sleep(.025)
+        publish(before)
+        raise RuntimeError('Oma Edge reservation surface did not become ready; restart the shell')
+
+    def reservations(self):
+        result = {}
+        for name, output in self.read('layers').items():
+            widths = [0, 0]
+            for group in output.get('levels', {}).values():
+                for layer in group:
+                    namespace = layer.get('namespace')
+                    if namespace in ('omarchy-edge-reserve-left', 'omarchy-edge-reserve-right'):
+                        widths[namespace.endswith('right')] += int(layer['w'])
+            result[name] = tuple(widths)
+        return result
 
     def dispatch(self, name, value):
         # Lua-configured Hyprland requires typed dispatchers, including over IPC.
@@ -277,6 +304,7 @@ class Controller:
         self.monitors = self.hypr.read('monitors')
         self.clients = self.hypr.read('clients')
         self.workspaces = self.hypr.read('workspaces')
+        self.reservations = self.hypr.reservations()
 
     def reconcile(self, config_reload=False):
         try:
@@ -284,7 +312,6 @@ class Controller:
             if self.settle_at is not None and time.monotonic() >= self.settle_at:
                 self.settle_at = None
             if config_reload:
-                self.reservations = {}
                 self.bindings = {}
             active = {m['name']: active_profile(self.config, m) for m in self.monitors}
             contexts = {}

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.6 — Bar-independent reservations
+
+- Reserve strip space with the plugin's own input-transparent Overlay surfaces.
+  The standard Top-layer bar stays full-width without a clone or bar patches.
+- Keep the active bar selection during setup; remove legacy adapter blocks from
+  saved user clones with backups. OmaChat can keep the standard bar's service access.
+- Wait for actual compositor reservations before positioning apps, and recover
+  current reservations from live surfaces after service/configuration reloads.
+- Stop wrapping monitor rules; the Lua bridge only forwards layout-change events.
+
 ## 0.1.5 — Stable full-width bar
 
 - Keep horizontal bars full-width and remove the full-width toggle.

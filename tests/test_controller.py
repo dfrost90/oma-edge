@@ -23,6 +23,9 @@ class FakeHypr:
             raise RuntimeError('reservation failed')
         self.monitors[0]['reserved'] = [left,30,right,0]
 
+    def reservations(self):
+        return {m['name']: (m['reserved'][0], m['reserved'][2]) for m in self.monitors}
+
     def dispatch(self, name, value):
         self.actions.append((name,value))
 
