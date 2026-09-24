@@ -479,6 +479,7 @@ Ui.Panel {
                             }
                         }
                         Ui.SearchableDropdown {
+                            id: windowPicker
                             Layout.fillWidth: true
                             showLabel: false
                             triggerLabel: "+ Add an open window"
@@ -486,7 +487,12 @@ Ui.Panel {
                             emptyText: "No matching open windows"
                             options: root.windows.map(function(c) { return {value:root.windowKey(c), label:c.title || c.class, description:c.class} })
                             enabled: root.draft !== null && root.draft.slots.length < 6
-                            onChanged: function(value) { root.addWindow(value) }
+                            onChanged: function(selectedWindow) {
+                                root.addWindow(selectedWindow)
+                                // This is an add action, not a persistent selection.
+                                // A closed window otherwise exposes its raw key.
+                                windowPicker.value = ""
+                            }
                         }
                         Caption {
                             Layout.fillWidth: true
