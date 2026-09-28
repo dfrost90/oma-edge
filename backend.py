@@ -190,7 +190,7 @@ class Hypr:
                 return
             time.sleep(.025)
         publish(before)
-        raise RuntimeError('Oma Edge reservation surface did not become ready; restart the shell')
+        raise RuntimeError('Oma Edge reservation surface did not become ready; retrying automatically')
 
     def reservations(self):
         result = {}
@@ -350,6 +350,7 @@ class Controller:
                     except Exception:
                         self.reservations[m['name']] = current
                         self.journal()
+                        self.settle_at = time.monotonic() + 2
                         raise
                 for profile in self.config['profiles']:
                     if self.config['enabled'] and profile['enabled'] and profile['monitor'] == m['name']:

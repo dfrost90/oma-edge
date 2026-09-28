@@ -7,19 +7,32 @@ Item {
     id: root
     readonly property string backend: decodeURIComponent(Qt.resolvedUrl("backend.py").toString().replace("file://", ""))
     property var reservations: ({})
+    property bool reservationLoadPending: true
     FileView {
         id: reservationFile
         path: Quickshell.env("XDG_RUNTIME_DIR") + "/omarchy-edge-strip/reservations.json"
         watchChanges: true
         onFileChanged: reload()
         onLoaded: {
+            root.reservationLoadPending = false
             try {
                 var data = JSON.parse(text())
                 root.reservations = data.session === Quickshell.env("HYPRLAND_INSTANCE_SIGNATURE")
                     ? data.monitors || ({}) : ({})
             } catch (e) { root.reservations = ({}) }
         }
-        onLoadFailed: root.reservations = ({})
+        onLoadFailed: {
+            root.reservations = ({})
+            root.reservationLoadPending = true
+        }
+    }
+    // On login even the runtime directory may not exist yet, so the file
+    // watcher cannot reliably observe the backend's first atomic write.
+    Timer {
+        interval: 250
+        repeat: true
+        running: root.reservationLoadPending
+        onTriggered: reservationFile.reload()
     }
     Variants {
         model: Quickshell.screens

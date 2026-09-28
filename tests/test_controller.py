@@ -31,6 +31,20 @@ class FakeHypr:
 
 
 class ControllerTests(unittest.TestCase):
+    def test_reservation_failure_retries_without_external_events(self):
+        self.controller.config = {'version': 1, 'enabled': True, 'profiles': [profile()]}
+        self.hypr.fail_reserve = True
+        with patch.object(e.time, 'monotonic', return_value=10):
+            self.controller.reconcile()
+        self.assertEqual(self.controller.settle_at, 12)
+        self.assertEqual(self.controller.error, 'reservation failed')
+        self.assertEqual(self.hypr.monitors[0]['reserved'], [0, 30, 0, 0])
+        with patch.object(e.time, 'monotonic', return_value=12):
+            self.controller.reconcile()
+        self.assertEqual(self.controller.error, '')
+        self.assertIsNone(self.controller.settle_at)
+        self.assertNotEqual(self.hypr.monitors[0]['reserved'], [0, 30, 0, 0])
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
