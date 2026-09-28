@@ -4,7 +4,15 @@ Keep real app windows in a reserved strip at the left or right of a monitor,
 while Hyprland's native scrolling, dwindle, or master layout uses the rest.
 Configure it from a bar panel. No compiled compositor plugin is needed.
 
-![Oma Edge panel](preview.png)
+## See it in action
+
+[![Oma Edge demo: configure a right-side strip, add apps, and switch workspaces](docs/media/oma-edge-demo.gif)](docs/media/oma-edge-how-to.mp4)
+
+The preview plays at 2× speed with the opening three seconds trimmed.
+[Watch or download the full how-to video](docs/media/oma-edge-how-to.mp4)
+at normal speed, or jump to the [step-by-step instructions](#use).
+
+[View the panel screenshot](preview.png).
 
 ## Features
 
