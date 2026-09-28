@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased — Keep existing apps when applying edits
+## 0.1.7 — Recover reservations after startup
+
+- Retry loading reservation data when the runtime file is missing at login.
+- Automatically retry failed reservations without requiring a shell restart.
+- Reset the window picker after adding an app so the next selection works reliably.
 
 - Preserve live window bindings for unchanged selections when adding, reordering,
   or resizing slots, even when the panel regenerates slot IDs.
