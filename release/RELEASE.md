@@ -1,36 +1,41 @@
-# Oma Edge 0.1.6
+# Oma Edge 0.1.8
 
 Repository: https://github.com/dfrost90/oma-edge
 Plugin ID: `io.github.dfrost90.edge-strip`
 
 ## Changes
 
-The standard horizontal Omarchy bar stays full-width while Oma Edge reserves
-side space through its own transparent, input-transparent Overlay surfaces.
-No custom bar clone is required, preserving standard bar service access for
-plugins such as OmaChat. The controller waits for compositor confirmation of
-reservations before positioning windows. The Lua bridge now only forwards
-layout-change events and does not modify monitor rules.
+Apps such as Telegram can refuse a narrow strip width on scaled laptop screens.
+The controller now learns minimum widths from settled resize responses and
+expands the reservation and app geometry together. The saved percentage stays
+unchanged and remains the preferred minimum; closing the constrained app lets
+the strip shrink again. Constraints are tied to window identity and reset when
+the window closes. A minimum wider than the available monitor produces an error.
+
+The profile selector now shows “No profiles” on first run and “New profile”
+while creating a profile, instead of exposing the internal -1 index.
 
 ## Upgrade
 
-After updating, rerun `python3 install.py`. Setup keeps the selected bar and
-backs up/removes legacy Oma Edge adapters from saved local bar clones. To switch
-from a previous clone to the standard bar, run `omarchy plugin enable omarchy.bar`.
+Update the plugin and run `omarchy restart shell` to ensure the new controller
+and panel code are loaded. Existing profiles require no migration. First-time
+installations still require the explicit `python3 install.py` setup step.
 
 ## Validation
 
-- 33 Python tests, Node panel tests, Lua bridge tests and syntax checks pass.
-- Plugin manifest validation and installer preflight pass.
-- Live checks pass for left/right strips, workspace leave/return and disabling;
-  the original settings and focus are restored.
-- The standard bar remained 3440 pixels wide with unchanged surface identity
-  across 81 samples covering both workspace transitions.
-- No Hyprland configuration errors. Physical multi-monitor hotplug and arbitrary
-  third-party bars using Overlay-layer reservations remain unverified.
+- Full Python suite, Node panel checks, Lua bridge checks, syntax checks and
+  Omarchy manifest validation pass.
+- Regression coverage includes left/right strips at 125% scaling, asynchronous
+  resize acknowledgement, app closure and window identity replacement.
+- Live laptop check: 1920×1080 at 125% scaling, preferred width 20%, Telegram
+  minimum width 323 logical pixels. Reservation expanded from 307 to 347 pixels;
+  Telegram occupies x=1201 through 1524 on a 1536-pixel logical screen, leaving
+  the expected 12-pixel right margin. Controller reported no error.
+- Physical multi-monitor hotplug and arbitrary Overlay-layer bars were not
+  tested for this release. The shell's plugin hot-reload issue is not addressed.
 
 ## Publication
 
-The source version is 0.1.6. Build the archive and checksum using
-`scripts/package.sh` when preparing a GitHub release. The marketplace submission
-text is maintained in `release/submission.md`; manual setup remains required.
+Build the archive and checksum with `scripts/package.sh`. Release assets are
+published under the `v0.1.8` tag as a prerelease, matching the preview status
+of earlier Oma Edge releases.

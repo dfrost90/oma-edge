@@ -254,3 +254,70 @@ class TerminalSelectionTests(unittest.TestCase):
         self.cliamp['pid'] += 100
         restarted.reconcile()
         self.assertEqual(restarted.managed, {})
+
+
+class MinimumWidthTests(unittest.TestCase):
+    setUp = ControllerTests.setUp
+
+    def configure(self, side='right'):
+        self.hypr.monitors = [monitor(width=1920, height=1080, scale=1.25,
+                                      reserved=[0,30,0,0])]
+        self.hypr.clients = [client('chat', 1)]
+        self.controller.config = e.validate({'version':1, 'enabled':True,
+            'profiles':[profile(side=side, slots=[{'id':'chat','class':'chat','weight':1}])]})
+        with patch.object(e.time, 'monotonic', return_value=10):
+            self.controller.reconcile()
+        self.assertEqual(self.controller.error, '')
+        self.hypr.clients[0]['size'] = [323,810]
+
+    def test_scaled_laptop_expands_both_sides_and_preserves_preference(self):
+        for side in ('left', 'right'):
+            with self.subTest(side=side):
+                self.configure(side)
+                self.hypr.actions.clear()
+                with patch.object(e.time, 'monotonic', return_value=10.21):
+                    self.controller.reconcile()
+                self.assertEqual(self.controller.error, '')
+                self.assertEqual(self.hypr.monitors[0]['reserved'],
+                                 [347,30,0,0] if side == 'left' else [0,30,347,0])
+                x = 12 if side == 'left' else 1201
+                self.assertIn(('movewindowpixel', f'exact {x} 42,address:0x1'), self.hypr.actions)
+                self.assertLessEqual(x + 323 + 12, 1536)
+                self.assertEqual(self.controller.config['profiles'][0]['width'], 20)
+                self.controller.minimum_widths.clear()
+                self.controller.size_requests.clear()
+
+    def test_close_restores_preferred_width_and_reused_identity_is_not_constrained(self):
+        self.configure()
+        with patch.object(e.time, 'monotonic', return_value=10.21):
+            self.controller.reconcile()
+        self.hypr.clients = []
+        self.controller.reconcile()
+        self.assertEqual(self.hypr.monitors[0]['reserved'], [0,30,307,0])
+        self.assertEqual(self.controller.minimum_widths, {})
+        self.hypr.clients = [dict(client('chat',1), pid=99)]
+        self.controller.reconcile()
+        self.assertEqual(self.hypr.monitors[0]['reserved'], [0,30,307,0])
+
+    def test_initial_large_window_is_not_a_minimum_and_early_ack_is_ignored(self):
+        self.configure()
+        with patch.object(e.time, 'monotonic', return_value=10.05):
+            self.controller.reconcile()
+        self.assertEqual(self.hypr.monitors[0]['reserved'], [0,30,307,0])
+        self.assertEqual(self.controller.minimum_widths, {})
+
+    def test_reused_address_cannot_inherit_a_live_constraint(self):
+        self.configure()
+        with patch.object(e.time, 'monotonic', return_value=10.21):
+            self.controller.reconcile()
+        self.hypr.clients[0]['pid'] = 99
+        self.hypr.clients[0]['size'] = [283,810]
+        with patch.object(e.time, 'monotonic', return_value=10.4):
+            self.controller.reconcile()
+        self.assertEqual(self.controller.minimum_widths, {})
+        self.assertEqual(self.hypr.monitors[0]['reserved'], [0,30,307,0])
+
+    def test_impossible_width_reports_error(self):
+        with self.assertRaisesRegex(ValueError, 'minimum width'):
+            e.geometry(monitor(width=1920, height=1080, scale=1.25), profile(),
+                       minimum_width=1600)

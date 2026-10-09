@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.8 — Fit apps on smaller screens
+
+- Expand strip reservations to fit acknowledged app minimum widths, including
+  scaled displays. Keep the saved width as the preferred minimum.
+- Recalculate the strip when constrained apps close or assignments change.
+- Show “No profiles” and “New profile” instead of the internal -1 index.
+- Disable the profile selector when there are no saved profiles.
+
 ## 0.1.7 — Recover reservations after startup
 
 - Retry loading reservation data when the runtime file is missing at login.

@@ -18,7 +18,7 @@ at normal speed, or jump to the [step-by-step instructions](#use).
 
 - Per-monitor profiles for one or several workspaces (with shared settings).
 - An optional **All workspaces** default, overridden by workspace profiles.
-- Width from 10–45%, left or right placement, up to six app slots.
+- Preferred width from 10–45%, left or right placement, up to six app slots.
 - Pick running windows, reorder them, and adjust relative heights (1–10).
 - Remember app classes and reclaim slots when apps reopen.
 - Keep the horizontal bar full-width without resizing it on workspace switches.
@@ -186,7 +186,10 @@ optional. Use the uninstall script before deleting the source.
   events restore their slot geometry; this is not a hard compositor drag lock.
 - App minimum heights are detected after resizing; other tiles share the remaining
   space while retaining gaps. If minimum heights cannot fit, use fewer slots or a
-  taller monitor. Apps may also enforce a minimum width; increase strip width if needed.
+  taller monitor. Apps may also enforce a minimum width; the strip expands automatically after
+  the app acknowledges its requested size. The saved percentage stays unchanged.
+  Width constraints are remembered for the lifetime of that window; reopening
+  the app lets the controller detect a changed minimum.
 - Geometry covers scale, rotation and monitor offsets in tests. Physical
   multi-monitor hotplug has not yet been verified on hardware.
 
@@ -215,7 +218,7 @@ License: MIT.
 
 ## Release status
 
-This checkout is version 0.1.6, a preview with bar-independent reservations. See [CHANGELOG.md](CHANGELOG.md)
+This checkout is version 0.1.8, a preview with bar-independent reservations. See [CHANGELOG.md](CHANGELOG.md)
 and [release/RELEASE.md](release/RELEASE.md) for verification and publication steps.
 The persistent plugin ID remains `io.github.dfrost90.edge-strip` for upgrade
 compatibility; Oma Edge is its display name. Node.js and Lua are development

@@ -284,9 +284,9 @@ Ui.Panel {
                         Ui.Dropdown {
                             Layout.fillWidth: true
                             showLabel: false
-                            value: String(root.profileIndex)
+                            value: root.profileIndex >= 0 ? String(root.profileIndex) : (root.draft ? "New profile" : "No profiles")
                             options: root.profileLabels.map(function(label, i) { return {value: String(i), label: label} })
-                            enabled: !root.dirty && !rpc.running
+                            enabled: root.profiles.length > 0 && !root.dirty && !rpc.running
                             onChanged: function(value) { root.selectProfile(Number(value)) }
                         }
                         Action { text: "New"; iconText: "+"; tooltipText: "Profile for the current workspace"; enabled: !root.dirty && !rpc.running; onClicked: root.newProfile() }

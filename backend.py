@@ -121,11 +121,13 @@ def logical_size(m):
         w, h = h, w
     return round(w / m['scale']), round(h / m['scale'])
 
-def geometry(m, p, current=(0, 0), minimums=None):
+def geometry(m, p, current=(0, 0), minimums=None, minimum_width=0):
     w, h = logical_size(m)
-    strip = round(w * p['width'] / 100)
+    strip = max(round(w * p['width'] / 100), minimum_width + 24 if minimum_width else 0)
     left, top, right, bottom = m.get('reserved', [0, 0, 0, 0])
     left, right = max(0, left-current[0]), max(0, right-current[1])
+    if strip > w-left-right:
+        raise ValueError('App minimum width does not fit this monitor. Use a wider monitor or reduce app scaling.')
     x = m['x'] + (left if p['side'] == 'left' else w-right-strip)
     y = m['y'] + top + 12
     available = h-top-bottom-24 - max(0, len(p['slots'])-1)*14
@@ -231,6 +233,7 @@ class Controller:
         self.bindings = {}
         self.saved_bindings = {}
         self.minimum_heights = {}
+        self.minimum_widths = {}
         self.size_requests = {}
         self.settle_at = None
         self.error = ''
@@ -329,17 +332,35 @@ class Controller:
         self.workspaces = self.hypr.read('workspaces')
         self.reservations = self.hypr.reservations()
 
+    def profile_minimum_width(self, profile):
+        clients = {c['address']: c for c in self.clients}
+        return max((self.minimum_widths.get((address, self.identity(clients[address])), 0)
+                    for slot in profile['slots']
+                    if (address := self.bindings.get(slot['id'])) in clients), default=0)
+
     def reconcile(self, config_reload=False):
         try:
             self.refresh()
             if self.settle_at is not None and time.monotonic() >= self.settle_at:
                 self.settle_at = None
+            # Only infer constraints from an acknowledged resize, never the
+            # arbitrary size a window had before it joined the strip.
+            clients = {c['address']: c for c in self.clients}
+            self.minimum_widths = {key: width for key, width in self.minimum_widths.items()
+                                   if key[0] in clients and self.identity(clients[key[0]]) == key[1]}
+            for (address, identity, requested_width), (_, requested_at) in self.size_requests.items():
+                client = clients.get(address)
+                if (client and self.identity(client) == identity and not client.get('fullscreen')
+                        and .12 <= time.monotonic() - requested_at <= 2
+                        and client['size'][0] > requested_width + 1):
+                    key = (address, identity)
+                    self.minimum_widths[key] = max(self.minimum_widths.get(key, 0), client['size'][0])
             active = {m['name']: active_profile(self.config, m) for m in self.monitors}
             contexts = {}
             for m in self.monitors:
                 p = active[m['name']]
                 current = self.reservations.get(m['name'], (0, 0))
-                width = geometry(m, p, current)[0] if p else 0
+                width = geometry(m, p, current, minimum_width=self.profile_minimum_width(p))[0] if p else 0
                 desired = (width, 0) if p and p['side'] == 'left' else (0, width)
                 if desired != current:
                     # Journal before mutation for recovery if the controller stops mid-apply.
@@ -389,7 +410,8 @@ class Controller:
                     matched.append((slot, c))
                 m, current = contexts[id(p)]
                 occupied = dict(p, slots=[slot for slot, _ in matched])
-                target_width = round(logical_size(m)[0] * p['width'] / 100) - 24
+                minimum_width = self.profile_minimum_width(p)
+                target_width = geometry(m, occupied, current, minimum_width=minimum_width)[0] - 24
                 size_keys = [(c['address'], self.identity(c), target_width) for _, c in matched]
                 # Wayland clients acknowledge requested sizes asynchronously.
                 # Inspect the settled result of our previous resize before retrying.
@@ -399,7 +421,7 @@ class Controller:
                         if client['size'][1] > request[0] + 1:
                             self.minimum_heights[key] = client['size'][1]
                 floors = [self.minimum_heights.get(key, 0) for key in size_keys]
-                boxes = geometry(m, occupied, current, floors)[1]
+                boxes = geometry(m, occupied, current, floors, minimum_width)[1]
                 for (slot, c), box in zip(matched, boxes):
                     address = c['address']
                     if address in self.managed and self.managed[address]['identity'] != self.identity(c):
