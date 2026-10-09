@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.9 — Keep profile data out of process arguments
+
+- Send panel requests through a private stdin pipe instead of command-line JSON,
+  preventing saved window titles from appearing in process listings.
+- Bound stdin requests to 1 MB and reject malformed JSON without echoing input.
+- Cover private request transport and actual process arguments in regression tests.
+
+
 ## 0.1.8 — Fit apps on smaller screens
 
 - Expand strip reservations to fit acknowledged app minimum widths, including

@@ -124,7 +124,8 @@ Ui.Panel {
     function send(data) {
         if (rpc.running) return
         requestResult = ""
-        rpc.command = ["python3", backend, "request", JSON.stringify(data)]
+        rpc.payload = JSON.stringify(data)
+        rpc.command = ["python3", backend, "request-stdin"]
         rpc.running = true
     }
     function save(remove) {
@@ -171,6 +172,12 @@ Ui.Panel {
     }
     Process {
         id: rpc
+        property string payload: ""
+        stdinEnabled: true
+        onStarted: {
+            write(payload + "\n")
+            payload = ""
+        }
         stdout: StdioCollector { onStreamFinished: root.requestResult = text }
         onExited: {
             try {

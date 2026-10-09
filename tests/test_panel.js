@@ -60,3 +60,22 @@ context.windows = [];
 context.addWindow(selectedKeys[0]);
 assert.equal(context.draft.slots.length, 3);
 assert.match(context.message, /closed/);
+
+// Execute the real sender and Process startup handler: payload must use stdin.
+const sendStart = qml.indexOf('    function send(data) {');
+const sendEnd = qml.indexOf('\n    }', sendStart) + 6;
+context.rpc = {running: false};
+context.backend = '/plugin/backend.py';
+vm.runInContext(qml.slice(sendStart, sendEnd), context);
+const privateRequest = {action: 'save', config: {title: 'Private title\nКиїв'}};
+context.send(privateRequest);
+assert.deepEqual(Array.from(context.rpc.command), ['python3', '/plugin/backend.py', 'request-stdin']);
+assert.equal(context.rpc.payload, JSON.stringify(privateRequest));
+const rpcBlock = qml.slice(qml.indexOf('        id: rpc'));
+assert.match(rpcBlock, /stdinEnabled: true/);
+context.payload = context.rpc.payload;
+context.write = data => { context.pipeData = data; };
+vm.runInContext(rpcBlock.match(/onStarted: \{([\s\S]*?)\n        \}/)[1], context);
+assert.equal(context.pipeData, JSON.stringify(privateRequest) + '\n');
+assert.equal(context.payload, '');
+console.log('Private panel requests use stdin, not command-line arguments');

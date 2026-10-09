@@ -682,7 +682,16 @@ if __name__ == '__main__':
         release_if_disabled()
     else:
         try:
-            req = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {'action': 'status'}
+            if len(sys.argv) > 1 and sys.argv[1] == 'request-stdin':
+                payload = sys.stdin.buffer.readline(1000001)
+                if len(payload) > 1000000:
+                    raise ValueError('Request too large')
+                try:
+                    req = json.loads(payload)
+                except (ValueError, UnicodeError):
+                    raise ValueError('Invalid request JSON') from None
+            else:
+                req = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {'action': 'status'}
             print(json.dumps(request(req)))
         except Exception as exc:
             print(json.dumps({'ok': False, 'error': str(exc)}))

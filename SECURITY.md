@@ -6,7 +6,11 @@ assigned windows and reserves side space using transparent, input-transparent
 Wayland layer surfaces owned by the service. The Lua bridge only emits layout
 notifications; monitor configuration is not modified.
 The panel and controller communicate through a private Unix socket; runtime
-state and configuration files are written with user-only permissions.
+state and configuration files are written with user-only permissions. Panel
+requests pass to the helper over stdin, never as command-line arguments; this
+keeps saved window titles out of process listings. The legacy CLI JSON argument
+form remains available for non-sensitive requests such as status; use
+`python3 backend.py request-stdin` for payloads containing private data.
 
 Explicit installation edits user Hyprland configuration, with backups and failure
 rollback. Upgrades remove legacy Oma Edge adapter blocks from user bar clones;
