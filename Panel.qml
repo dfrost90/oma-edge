@@ -195,10 +195,38 @@ Ui.Panel {
         id: button
         anchors.fill: parent
         bar: root.bar
-        text: "󰕰"
+        iconComponent: Component {
+            EdgeIcon { ink: button.active && button.useActiveColor ? button.activeColor : button.foreground }
+        }
         tooltipText: "Oma Edge"
         active: root.opened
         onPressed: root.toggle()
+    }
+    // A full work area beside a narrow two-app strip, readable at bar size.
+    component EdgeIcon: Item {
+        property color ink: Color.foreground
+        Rectangle {
+            anchors.fill: parent
+            anchors.margins: Math.max(1, parent.width * 0.06)
+            color: "transparent"
+            radius: width * 0.12
+            border.color: parent.ink
+            border.width: Math.max(1, parent.width * 0.075)
+        }
+        Rectangle {
+            x: parent.width * 0.62
+            y: parent.height * 0.1
+            width: Math.max(1, parent.width * 0.075)
+            height: parent.height * 0.8
+            color: parent.ink
+        }
+        Rectangle {
+            x: parent.width * 0.64
+            y: parent.height * 0.46
+            width: parent.width * 0.26
+            height: Math.max(1, parent.height * 0.075)
+            color: parent.ink
+        }
     }
     component Caption: Text {
         color: Color.foreground
@@ -264,7 +292,7 @@ Ui.Panel {
                         meta: root.config.enabled ? "Apps beside your layout" : "Paused"
                         detail: root.dirty ? "Unsaved" : ""
                         iconComponent: Component {
-                            Text { text: "󰕰"; color: Color.foreground; font.family: Style.font.family; font.pixelSize: Style.font.display }
+                            EdgeIcon { implicitWidth: Style.font.display; implicitHeight: Style.font.display }
                         }
                         trailingControl: Component {
                             Ui.ToggleSwitch {

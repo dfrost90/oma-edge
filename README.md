@@ -4,6 +4,8 @@ Keep real app windows in a reserved strip at the left or right of a monitor,
 while Hyprland's native scrolling, dwindle, or master layout uses the rest.
 Configure it from a bar panel. No compiled compositor plugin is needed.
 
+![Oma Edge: a native work area with notes and music in a reserved app strip](preview.png)
+
 ## See it in action
 
 [![Oma Edge demo: configure a right-side strip, add apps, and switch workspaces](docs/media/oma-edge-demo.gif)](docs/media/oma-edge-how-to.mp4)
@@ -12,7 +14,9 @@ The preview plays at 2× speed with the opening three seconds trimmed.
 [Watch or download the full how-to video](docs/media/oma-edge-how-to.mp4)
 at normal speed, or jump to the [step-by-step instructions](#use).
 
-[View the panel screenshot](preview.png).
+[View the staged desktop capture](docs/media/oma-edge-desktop.png).
+The promo uses fictional demo apps on a separate workspace, with the system bar
+excluded. See [how the preview was made](docs/promo/README.md).
 
 ## Features
 
@@ -152,7 +156,10 @@ windows for sites such as YouTube.
 - `reservations.json` in the runtime directory: controller requests consumed by
   the service's side surfaces. Requests are scoped to the current compositor session.
 - `bridge.lua`: notifies the controller when monitor geometry or layer reservations
-  change. It does not wrap or modify monitor rules.
+  change. While a strip is active on a scrolling workspace, horizontal directional
+  focus uses scrolling's column navigation for tiled windows. Existing keybindings
+  are preserved; other layouts, floating windows, and monitors without a strip use
+  ordinary focus. It does not wrap or modify monitor rules.
 
 The controller waits for the compositor to apply side reservations before laying
 out apps. Surfaces disappear when the shell/service stops. Existing monitor
