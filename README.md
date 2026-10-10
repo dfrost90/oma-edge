@@ -225,7 +225,7 @@ License: MIT.
 
 ## Release status
 
-This checkout is version 0.1.9, a preview with bar-independent reservations. See [CHANGELOG.md](CHANGELOG.md)
+This checkout is version 0.1.10, a preview with bar-independent reservations. See [CHANGELOG.md](CHANGELOG.md)
 and [release/RELEASE.md](release/RELEASE.md) for verification and publication steps.
 The persistent plugin ID remains `io.github.dfrost90.edge-strip` for upgrade
 compatibility; Oma Edge is its display name. Node.js and Lua are development

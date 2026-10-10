@@ -1,18 +1,27 @@
-# Oma Edge 0.1.9
+# Oma Edge 0.1.10
 
-Fixes the window-title exposure reported during marketplace review of 0.1.8.
-Saving profiles and toggling Oma Edge now send JSON to the Python helper over
-stdin instead of command-line arguments. The helper command line contains no
-profile data. Stdin input is limited to 1 MB; malformed JSON errors do not echo
-private input. Legacy CLI JSON arguments remain available for non-sensitive
-requests; use `request-stdin` for private payloads.
+Fixes horizontal focus getting stuck beside a floating edge app in Hyprland's
+scrolling layout. The bridge uses native column navigation only for tiled
+scrolling windows on monitors with an active Oma Edge reservation. Existing
+keybindings remain in place. Other layouts, floating windows, special workspaces
+with other layouts, and monitors without a strip retain ordinary focus. Disabling
+the strip restores ordinary focus automatically.
 
-Includes the 0.1.8 minimum-width and empty-profile fixes. Existing profiles
-require no migration. Update the plugin and run `omarchy restart shell`.
-First-time installations still require explicit manual setup.
+The bar and panel use a theme-aware work-area-and-strip icon. The preview and
+README include a promotional image based on fictional demo apps captured on a
+separate workspace. The demo capture script restores the user's configuration,
+workspace, and focus and closes only its own browsers.
 
-Validation: 44 Python tests, Node panel tests, Lua bridge and syntax checks,
-and Omarchy manifest validation pass. A subprocess test inspects actual
-`/proc/<pid>/cmdline` while a private Unicode title travels over stdin and
-round-trips through a temporary Unix socket. Panel tests exercise the actual
-sender and startup handler. Desktop clicking was not automated for this patch.
+Includes the 0.1.9 private stdin request transport and the 0.1.8 minimum-width
+fixes. Existing profiles require no migration. Manual setup remains required:
+update the plugin, then reload the bridge and shell using the explicit installer:
+
+```bash
+python3 "${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/io.github.dfrost90.edge-strip/install.py" --check
+python3 "${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/io.github.dfrost90.edge-strip/install.py"
+```
+
+The installer backs up any changed user configuration and rolls it back on
+failure. No root access, package downloads, or network access are required.
+Marketplace verification must target the final full commit SHA for this release;
+it does not cover later upstream changes or replace a security audit.

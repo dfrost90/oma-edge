@@ -1,12 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.1.10 — Navigate scrolling columns beside edge apps
 
 - Replace the panel screenshot with a promotional preview built from a separate
   demo workspace containing only fictional content.
 - Replace the grid glyph with a theme-aware work-area-and-edge-strip icon in
   both the bar and panel header.
-
 - Fix horizontal focus getting stuck with a floating edge app beside scrolling
   columns. Preserve configured bindings and use column navigation only for tiled
   scrolling windows on monitors with an active strip reservation. Ordinary focus

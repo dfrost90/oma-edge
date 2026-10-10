@@ -3,8 +3,10 @@
 Oma Edge runs as the logged-in user. It reads window classes, titles, geometry,
 and workspace/monitor state through local Hyprland IPC. It moves/resizes/pins
 assigned windows and reserves side space using transparent, input-transparent
-Wayland layer surfaces owned by the service. The Lua bridge only emits layout
-notifications; monitor configuration is not modified.
+Wayland layer surfaces owned by the service. The Lua bridge emits layout
+notifications and wraps horizontal directional focus for tiled scrolling windows
+on monitors with an active strip reservation. It uses native column navigation
+in that case and ordinary focus elsewhere; monitor configuration is not modified.
 The panel and controller communicate through a private Unix socket; runtime
 state and configuration files are written with user-only permissions. Panel
 requests pass to the helper over stdin, never as command-line arguments; this
