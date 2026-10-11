@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.11 — Avoid unsolicited clipboard reads
+
+- Prevent Oma Edge controls from triggering native Qt clipboard reads on clipboard changes. Weight uses a 1–10 selector; window search accepts bounded keyboard input without paste or input-method composition.
+- Add keyboard editing regression tests and an isolated, bounded Wayland clipboard reproducer.
+
 ## 0.1.10 — Navigate scrolling columns beside edge apps
 
 - Replace the panel screenshot with a promotional preview built from a separate

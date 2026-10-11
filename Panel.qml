@@ -503,17 +503,19 @@ Ui.Panel {
                                 Layout.fillWidth: true
                                 spacing: Style.spacing.controlGap
                                 Caption { text: modelData.label; Layout.fillWidth: true; elide: Text.ElideRight; wrapMode: Text.NoWrap }
-                                Ui.NumberField {
-                                    from: 1; to: 10; value: modelData.weight
-                                    fieldWidth: Style.space(70)
-                                    onModified: function(value) { root.setWeight(index, value) }
+                                Ui.Dropdown {
+                                    showLabel: false
+                                    Layout.preferredWidth: Style.space(70)
+                                    value: String(modelData.weight)
+                                    options: ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"]
+                                    onChanged: function(value) { root.setWeight(index, Number(value)) }
                                 }
                                 IconAction { iconText: "↑"; tooltipText: "Move up"; enabled: index > 0; onClicked: root.slotAction(index, "up") }
                                 IconAction { iconText: "↓"; tooltipText: "Move down"; enabled: index < root.draft.slots.length - 1; onClicked: root.slotAction(index, "down") }
                                 IconAction { iconText: "×"; tooltipText: "Remove app"; onClicked: root.slotAction(index, "remove") }
                             }
                         }
-                        Ui.SearchableDropdown {
+                        WindowPicker {
                             id: windowPicker
                             Layout.fillWidth: true
                             showLabel: false

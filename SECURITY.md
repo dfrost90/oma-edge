@@ -24,3 +24,14 @@ Report reproducible bugs through the repository's issue tracker after it is
 published. Avoid attaching unredacted state.json or status output: they include
 window titles and application identifiers. Use GitHub private vulnerability
 reporting if enabled; do not post sensitive exploit details publicly.
+
+## Clipboard isolation
+
+The weight selector and window picker must not instantiate editable native Qt
+text controls. On the tested Qt 6.11.2 build, `q_canPasteChanged()` eagerly calls
+`QMimeData::text()` on clipboard changes. A streaming Wayland provider can block
+the shell before validation. The search field stays native-read-only and updates
+a 256-code-unit query from keyboard events; native paste, cut, and IME composition
+are intentionally unavailable. Cursor navigation and selection remain supported.
+This mitigation covers Oma Edge's controls, not unrelated shell components.
+See [local verification](docs/clipboard-verification.md).

@@ -200,6 +200,10 @@ optional. Use the uninstall script before deleting the source.
 - Geometry covers scale, rotation and monitor offsets in tests. Physical
   multi-monitor hotplug has not yet been verified on hardware.
 
+Window search supports direct typing, selection, cursor movement, and deletion.
+Clipboard paste and IME composition are unavailable in this search field.
+Height shares are selected from 1–10.
+
 ## Development and verification
 
 ```bash
@@ -225,7 +229,7 @@ License: MIT.
 
 ## Release status
 
-This checkout is version 0.1.10, a preview with bar-independent reservations. See [CHANGELOG.md](CHANGELOG.md)
+This checkout is version 0.1.11, a preview with bar-independent reservations. See [CHANGELOG.md](CHANGELOG.md)
 and [release/RELEASE.md](release/RELEASE.md) for verification and publication steps.
 The persistent plugin ID remains `io.github.dfrost90.edge-strip` for upgrade
 compatibility; Oma Edge is its display name. Node.js and Lua are development
