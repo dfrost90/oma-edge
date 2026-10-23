@@ -20,23 +20,12 @@ class ReservationTests(unittest.TestCase):
         with patch.object(e.Hypr, 'read', return_value=layers):
             self.assertEqual(e.Hypr().reservations(), {'DP-1': (688, 0), 'DP-2': (0, 400)})
 
-    def test_request_preserves_other_outputs_and_waits_for_surface(self):
-        before = {'DP-1': (0, 0), 'DP-2': (300, 0)}
-        applied = dict(before, **{'DP-1': (0, 688)})
+    def test_publish_all_outputs_without_polling_or_sleeping(self):
+        desired = {'DP-1': (0, 688), 'DP-2': (300, 0)}
         with tempfile.TemporaryDirectory() as directory, patch.object(e, 'RUNTIME', Path(directory)), \
-                patch.object(e.Hypr, 'reservations', side_effect=[before, before, applied]), \
-                patch.object(e.time, 'sleep') as sleep:
-            e.Hypr().reserve('DP-1', 0, 688)
+                patch.object(e.Hypr, 'read') as read, patch.object(e.time, 'sleep') as sleep:
+            e.Hypr().reserve(desired)
             data = json.loads((Path(directory)/'reservations.json').read_text())
             self.assertEqual(data['monitors'], {'DP-1': [0, 688], 'DP-2': [300, 0]})
-            sleep.assert_called_once()
-
-    def test_surface_timeout_restores_previous_request(self):
-        before = {'DP-1': (0, 0)}
-        with tempfile.TemporaryDirectory() as directory, patch.object(e, 'RUNTIME', Path(directory)), \
-                patch.object(e.Hypr, 'reservations', return_value=before), \
-                patch.object(e.time, 'monotonic', side_effect=[0, 3]):
-            with self.assertRaisesRegex(RuntimeError, 'did not become ready'):
-                e.Hypr().reserve('DP-1', 0, 688)
-            data = json.loads((Path(directory)/'reservations.json').read_text())
-            self.assertEqual(data['monitors'], {'DP-1': [0, 0]})
+            read.assert_not_called()
+            sleep.assert_not_called()

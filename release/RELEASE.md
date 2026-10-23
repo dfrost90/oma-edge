@@ -1,34 +1,53 @@
-# Oma Edge 0.1.11
+# Oma Edge 0.1.12
 
-Fixes the clipboard-read issue reported by HANCORE-linux on marketplace #10880.
-On the tested Qt 6.11.2 build, editable native text controls request clipboard
-text on clipboard changes, even without paste, before field validation.
+Restores theme colors for the panel's custom labels, header icon and layout
+preview and window picker. Failed saves now preserve the selected profile and unsaved edits.
+Slot IDs remain stable when apps are reordered, weights change or workspaces
+are added and removed.
 
-App weights now use a 1–10 dropdown. Window search retains title/class filtering,
-selection, cursor movement, and deletion through a bounded keyboard-only field
-that remains native-read-only. Search paste/cut and IME composition are unavailable.
-This mitigates Oma Edge's controls, not unrelated shell inputs or Qt itself.
+Unchanged reconciliation uses four compositor queries instead of eight and
+skips identical recovery journal writes. Recovery records are still written
+before window mutations. Monitor reservations are applied together, with
+acknowledgements handled by the event loop so workspace events and status
+requests remain responsive. Save replies wait for acknowledgement or rollback.
 
-A bounded provider on a private Wayland server reproduced one unsolicited read
-and a 4,143 ms event-loop stall before the fix. Patched inputs made zero reads,
-with a maximum heartbeat gap of 263 ms. The provider sent only 128 KiB over four
-seconds; memory exhaustion was not attempted. The desktop clipboard was untouched.
-See [verification and reproduction instructions](../docs/clipboard-verification.md).
+Profile transformations are extracted into `ProfileModel.js`, and controller
+reconciliation is separated into snapshot indexing, constraint tracking,
+planning, window updates and recovery stages.
 
-Validation: 44 Python tests, Node panel checks, Lua bridge/syntax checks, Omarchy
-manifest validation, Qt Quick keyboard tests, isolated clipboard regression,
-and Quickshell picker filtering/selection checks passed locally. Packaging includes
-both new QML components and excludes compiled reproduction binaries.
+Retains the clipboard-safe weight selector and bounded, native-read-only window
+search from 0.1.11, along with the scrolling-focus fix and private stdin transport.
 
-Retains the 0.1.10 scrolling-focus fix and 0.1.9 private stdin transport.
-Existing profiles require no migration. Manual setup remains required:
+## Verification
 
-```sh
+- 51 Python tests, including an isolated daemon test for deferred saves and
+  status requests, plus simulated multi-monitor acknowledgement and rollback.
+- JavaScript checks for profile selection, stable slot IDs and private request
+  transport; Lua bridge checks and syntax checks; Qt Quick keyboard-search tests.
+- Quickshell execution of the extracted profile model and visual inspection
+  of the installed panel.
+- Bounded private-Wayland clipboard regression: baseline one unsolicited read
+  and a 4,071 ms heartbeat gap; patched zero reads and a 252 ms maximum gap.
+  The test does not connect to the desktop clipboard.
+- Desktop smoke checks for right/left reservations, workspace switching,
+  full-width bar stability, disabling and restoration of configuration/focus.
+
+Physical multi-monitor hotplug and a clean first installation in a separate
+Omarchy session remain unverified. Individual compositor commands and incoming
+request reads remain synchronous.
+
+## Updating
+
+Existing profiles require no migration. Include `ProfileModel.js` when updating
+the plugin; it is included alongside `WindowPicker.qml` and `KeyboardSearch.qml`
+in the release archive. Manual setup remains required:
+
+```bash
 python3 "${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/io.github.dfrost90.edge-strip/install.py" --check
 python3 "${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/plugins/io.github.dfrost90.edge-strip/install.py"
 ```
 
 The installer backs up changed user configuration and rolls it back on failure.
-Marketplace verification must target the new exact commit. Older release tags
-remain unchanged. This prerelease does not claim marketplace approval or a
-security audit; manual-setup metadata and approval require maintainer review.
+No root access, package downloads or network access are required by the installer.
+Marketplace verification must target the final full commit SHA for this release;
+it does not cover later upstream changes or replace a security audit.

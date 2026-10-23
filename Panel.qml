@@ -6,6 +6,8 @@ import Quickshell
 import Quickshell.Io
 import qs.Ui as Ui
 import qs.Commons
+import qs.Commons as Commons
+import "ProfileModel.js" as ProfileModel
 
 Ui.Panel {
     id: root
@@ -20,26 +22,15 @@ Ui.Panel {
     property bool dirty: false
     property string message: ""
     property string requestResult: ""
+    property string pendingSelection: ""
+    property string savedSelection: ""
     readonly property string backend: decodeURIComponent(Qt.resolvedUrl("backend.py").toString().replace("file://", ""))
     readonly property var monitors: snapshot.monitors || []
     readonly property var windows: (snapshot.clients || []).filter(function(c) {
         return c.mapped && !c.fullscreen && !(c.grouped || []).length
     })
     readonly property var profiles: groupedProfiles()
-    function groupedProfiles() {
-        var result = []
-        ;(config.profiles || []).forEach(function(p, i) {
-            var existing = p.group ? result.find(function(r) { return r.group === p.group && r.monitor === p.monitor }) : null
-            if (existing) { existing.workspaces.push(p.workspace); existing.sourceIndices.push(i) }
-            else {
-                var item = clone(p)
-                item.workspaces = [p.workspace]
-                item.sourceIndices = [i]
-                result.push(item)
-            }
-        })
-        return result
-    }
+    function groupedProfiles() { return ProfileModel.groupedProfiles(config) }
     readonly property var workspaceOptions: {
         // Match Omarchy’s Workspaces widget: five base slots plus live slots through 10.
         var values = ["1", "2", "3", "4", "5"]
@@ -64,7 +55,7 @@ Ui.Panel {
     readonly property var profileLabels: profiles.map(function(p) {
         return p.monitor + " · " + (p.workspaces.indexOf("*") >= 0 ? "All workspaces" : "Workspaces " + p.workspaces.map(function(w) { return w.replace("name:", "") }).join(", "))
     })
-    function clone(v) { return JSON.parse(JSON.stringify(v)) }
+    function clone(v) { return ProfileModel.clone(v) }
     function selectProfile(i) {
         profileIndex = i
         draft = i >= 0 && i < profiles.length ? clone(profiles[i]) : null
@@ -101,7 +92,7 @@ Ui.Panel {
         if (!c) { message = "That window has closed. Select an open window."; return }
         var slots = clone(draft.slots)
         if (slots.length >= 6) { message = "Maximum six app slots"; return }
-        slots.push({id: "slot_" + Date.now() + "_" + slots.length, class: c.class,
+        slots.push({id: ProfileModel.newId("slot"), class: c.class,
                     label: c.title || c.class, preferred: String(c.stableId || ""),
                     windowTitle: c.title || "", weight: 1})
         edit("slots", slots)
@@ -129,35 +120,30 @@ Ui.Panel {
         rpc.running = true
     }
     function save(remove) {
-        if (!draft) return
-        var next = clone(config)
-        if (!remove && !draft.workspaces.length) { message = "Select at least one workspace."; return }
-        var indices = draft.sourceIndices || []
-        next.profiles = next.profiles.filter(function(p, i) { return indices.indexOf(i) < 0 })
-        if (!remove) {
-            var conflict = next.profiles.find(function(p) {
-                return p.monitor === root.draft.monitor && root.draft.workspaces.indexOf(p.workspace) >= 0
-            })
-            if (conflict) { message = "Workspace " + conflict.workspace + " already has a profile. Edit that profile or uncheck this workspace."; return }
-            var group = draft.group || "group_" + Date.now()
-            draft.workspaces.forEach(function(ws, i) {
-                var p = root.clone(root.draft)
-                p.workspace = ws
-                p.group = group
-                delete p.workspaces
-                delete p.sourceIndices
-                p.slots.forEach(function(slot, j) { slot.id = group + "_" + i + "_" + j })
-                next.profiles.push(p)
-            })
-        }
-        profileIndex = remove ? 0 : Math.max(0, profiles.length - (indices.length ? 1 : 0))
-        send({action: "save", config: next})
+        if (!draft || rpc.running) return
+        try {
+            var result = ProfileModel.saveProfile(config, draft, remove)
+            pendingSelection = result.selection
+            send({action: "save", config: result.config})
+        } catch (e) { message = e.message }
+    }
+    function finishRequest(result) {
+        if (result.ok) {
+            savedSelection = pendingSelection
+            dirty = false
+            message = "Saved"
+            state.reload()
+        } else message = result.error || "Could not apply configuration"
+        pendingSelection = ""
     }
     function readState() {
         try {
             snapshot = JSON.parse(state.text())
             if (!dirty && !rpc.running) {
+                var selection = savedSelection || ProfileModel.profileKey(profiles[profileIndex])
+                savedSelection = ""
                 config = clone(snapshot.config)
+                profileIndex = profiles.findIndex(function(p) { return ProfileModel.profileKey(p) === selection })
                 if (profileIndex < 0 || profileIndex >= profiles.length) profileIndex = profiles.length ? 0 : -1
                 draft = profileIndex >= 0 ? clone(profiles[profileIndex]) : null
             }
@@ -181,13 +167,8 @@ Ui.Panel {
         stdout: StdioCollector { onStreamFinished: root.requestResult = text }
         onExited: {
             try {
-                var result = JSON.parse(root.requestResult)
-                if (result.ok) {
-                    root.dirty = false
-                    root.message = "Saved"
-                    state.reload()
-                } else root.message = result.error || "Could not apply configuration"
-            } catch(e) { root.message = "Service unavailable. Check installation or restart the shell." }
+                root.finishRequest(JSON.parse(root.requestResult))
+            } catch(e) { root.pendingSelection = ""; root.message = "Service unavailable. Check installation or restart the shell." }
         }
     }
     onOpenedChanged: if (opened) state.reload()
@@ -204,7 +185,7 @@ Ui.Panel {
     }
     // A full work area beside a narrow two-app strip, readable at bar size.
     component EdgeIcon: Item {
-        property color ink: Color.foreground
+        property color ink: Commons.Color.foreground
         Rectangle {
             anchors.fill: parent
             anchors.margins: Math.max(1, parent.width * 0.06)
@@ -229,7 +210,7 @@ Ui.Panel {
         }
     }
     component Caption: Text {
-        color: Color.foreground
+        color: Commons.Color.foreground
         font.family: Style.font.family
         font.pixelSize: Style.font.body
         wrapMode: Text.Wrap
@@ -328,6 +309,7 @@ Ui.Panel {
                     }
                     ColumnLayout {
                         visible: root.draft !== null
+                        enabled: !rpc.running
                         Layout.fillWidth: true
                         spacing: Style.space(10)
                         ColumnLayout {
@@ -447,7 +429,7 @@ Ui.Panel {
                             Layout.fillWidth: true
                             Layout.preferredHeight: Style.space(100)
                             color: "transparent"
-                            borderSpec: Border.controlSpec("normal", Color.foreground, Color.accent)
+                            borderSpec: Border.controlSpec("normal", Commons.Color.foreground, Commons.Color.accent)
                             radius: Style.cornerRadius
                             readonly property real stripWidth: (width - Style.space(12)) * (root.draft ? root.draft.width / 100 : 0.2)
                             readonly property bool onLeft: root.draft && root.draft.side === "left"
@@ -456,7 +438,7 @@ Ui.Panel {
                                 y: Style.space(6)
                                 width: preview.width - Style.space(12)
                                 height: Style.space(5)
-                                color: Color.foreground; opacity: 0.5
+                                color: Commons.Color.foreground; opacity: 0.5
                             }
                             Caption {
                                 x: Style.space(6) + (preview.onLeft ? preview.stripWidth : 0)
@@ -482,7 +464,7 @@ Ui.Panel {
                                         required property var modelData
                                         width: parent.width
                                         height: (preview.height - Style.space(24) - (parent.slots.length - 1) * parent.spacing) * modelData.weight / parent.total
-                                        color: Style.selectedFillFor(Color.foreground, Color.accent)
+                                        color: Style.selectedFillFor(Commons.Color.foreground, Commons.Color.accent)
                                         radius: Style.cornerRadius
                                         Caption { anchors.fill: parent; anchors.margins: Style.space(3); text: modelData.label; font.pixelSize: Style.font.caption; elide: Text.ElideRight; wrapMode: Text.NoWrap; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                     }

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.12 — Restore theme colors and streamline reconciliation
+
+- Preserve the selected profile and unsaved edits when applying settings fails.
+- Extract profile transformations into a shared model and retain slot IDs across
+  app reordering, weight changes and workspace edits.
+- Split reconciliation into snapshot indexing, constraint tracking, profile and
+  geometry planning, window updates, and recovery stages.
+- Avoid the second compositor snapshot when nothing changes, and skip identical
+  recovery journal writes while retaining records before window mutations.
+- Apply monitor reservations together without blocking the event loop. Complete
+  save replies after acknowledgement or rollback, while continuing to serve status.
+- Qualify shell palette references so QML resolves Omarchy's Color singleton.
+  Restore theme colors for custom labels, the header icon, layout preview and window picker.
+
 ## 0.1.11 — Avoid unsolicited clipboard reads
 
 - Prevent Oma Edge controls from triggering native Qt clipboard reads on clipboard changes. Weight uses a 1–10 selector; window search accepts bounded keyboard input without paste or input-method composition.

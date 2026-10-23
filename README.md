@@ -162,7 +162,9 @@ windows for sites such as YouTube.
   ordinary focus. It does not wrap or modify monitor rules.
 
 The controller waits for the compositor to apply side reservations before laying
-out apps. Surfaces disappear when the shell/service stops. Existing monitor
+out apps, while continuing to process workspace events and status requests.
+Apply finishes after the reservations are acknowledged; failed applies restore
+the previous settings. Surfaces disappear when the shell/service stops. Existing monitor
 settings and reservations remain under your control.
 
 ```bash
@@ -225,11 +227,18 @@ multi-monitor behavior still needs hardware verification.
 For QML changes in a symlinked checkout, rescan the plugin and restart the shell
 when necessary; the shell's file watcher may not follow changes under symlinks.
 
+`ProfileModel.js` contains the panel's profile grouping and serialization logic.
+The controller separates snapshot indexing, assignment and geometry planning,
+window updates, and recovery. Reservation acknowledgements run through the daemon
+event loop; a no-change pass reads one compositor snapshot and leaves the recovery
+journal untouched. The test suite includes an isolated daemon with a fake
+compositor to exercise deferred saves without changing the desktop.
+
 License: MIT.
 
 ## Release status
 
-This checkout is version 0.1.11, a preview with bar-independent reservations. See [CHANGELOG.md](CHANGELOG.md)
+This checkout is version 0.1.12, a preview with bar-independent reservations. See [CHANGELOG.md](CHANGELOG.md)
 and [release/RELEASE.md](release/RELEASE.md) for verification and publication steps.
 The persistent plugin ID remains `io.github.dfrost90.edge-strip` for upgrade
 compatibility; Oma Edge is its display name. Node.js and Lua are development

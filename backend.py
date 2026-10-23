@@ -175,24 +175,12 @@ class Hypr:
         p = subprocess.run(['hyprctl', '-j', name], capture_output=True, text=True, timeout=5, check=True)
         return json.loads(p.stdout)
 
-    def reserve(self, name, left, right):
-        before = self.reservations()
-        desired = dict(before, **{name: (int(left), int(right))})
-        def publish(values):
-            atomic_json(RUNTIME/'reservations.json', {
-                'session': os.environ.get('HYPRLAND_INSTANCE_SIGNATURE', ''),
-                'monitors': values,
-            })
-        publish(desired)
-        # Layer surfaces are configured asynchronously. Do not lay out windows
-        # against a reservation until the compositor has applied it.
-        deadline = time.monotonic() + 2
-        while time.monotonic() < deadline:
-            if self.reservations().get(name, (0, 0)) == (left, right):
-                return
-            time.sleep(.025)
-        publish(before)
-        raise RuntimeError('Oma Edge reservation surface did not become ready; retrying automatically')
+    def reserve(self, desired):
+        """Publish all outputs together; the controller observes acknowledgements."""
+        atomic_json(RUNTIME/'reservations.json', {
+            'session': os.environ.get('HYPRLAND_INSTANCE_SIGNATURE', ''),
+            'monitors': desired,
+        })
 
     def reservations(self):
         result = {}
@@ -239,6 +227,12 @@ class Controller:
         self.error = ''
         self.config_error = ''
         self.last_state = None
+        self.last_journal = None
+        self.pending_reservation = None
+        self.pending_save = None
+        self.save_result = None
+        self.waiting = False
+        self.mutations = 0
         self.monitors = []
         self.clients = []
         self.workspaces = []
@@ -251,13 +245,17 @@ class Controller:
                 self.reservations = {k: tuple(v) for k, v in saved.get('reservations', {}).items()}
 
     def load(self):
-        self.set_config(validate(json.loads(CONFIG.read_text())) if CONFIG.exists() else copy.deepcopy(DEFAULT))
+        config = validate(json.loads(CONFIG.read_text())) if CONFIG.exists() else copy.deepcopy(DEFAULT)
+        changed = config != self.config
+        if changed:
+            self.set_config(config)
         self.config_error = ''
+        return changed
 
     @staticmethod
     def slot_key(profile, slot):
-        # Panel saves regenerate positional IDs. Match the selection itself,
-        # not its position, label, or height, when retaining a live window.
+        # Selection-based fallback preserves bindings from older panels that
+        # regenerated slot IDs. Stable IDs alone must not retain a replaced app.
         return json.dumps([profile['monitor'], profile['workspace'], slot['class'],
                            slot['preferred'], slot.get('windowTitle', '')])
 
@@ -274,10 +272,18 @@ class Controller:
                          if self.slot_key(p, s) in previous}
         self.config = config
 
-    def journal(self):
-        atomic_json(self.journal_path, {'session': os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'),
-                                     'managed': self.managed, 'reservations': self.reservations,
-                                     'slot_bindings': self.binding_selections()})
+    def journal(self, reservations=None):
+        data = {'session': os.environ.get('HYPRLAND_INSTANCE_SIGNATURE'),
+                'managed': self.managed,
+                'reservations': self.reservations if reservations is None else reservations,
+                'slot_bindings': self.binding_selections()}
+        if data != self.last_journal:
+            atomic_json(self.journal_path, data)
+            self.last_journal = copy.deepcopy(data)
+
+    def dispatch(self, name, value):
+        self.hypr.dispatch(name, value)
+        self.mutations += 1
 
     def identity(self, c):
         return str(c.get('stableId', '')) + ':' + str(c['pid']) + ':' + c['class']
@@ -313,16 +319,16 @@ class Controller:
         if c and self.identity(c) == original['identity']:
             target = 'address:' + address
             if c['pinned']:
-                self.hypr.dispatch('pin', target)
-            self.hypr.dispatch('movetoworkspacesilent', original['workspace']+','+target)
+                self.dispatch('pin', target)
+            self.dispatch('movetoworkspacesilent', original['workspace']+','+target)
             if original['floating']:
-                self.hypr.dispatch('setfloating', target)
-                self.hypr.dispatch('resizewindowpixel', f"exact {original['size'][0]} {original['size'][1]},{target}")
-                self.hypr.dispatch('movewindowpixel', f"exact {original['at'][0]} {original['at'][1]},{target}")
+                self.dispatch('setfloating', target)
+                self.dispatch('resizewindowpixel', f"exact {original['size'][0]} {original['size'][1]},{target}")
+                self.dispatch('movewindowpixel', f"exact {original['at'][0]} {original['at'][1]},{target}")
                 if original['pinned']:
-                    self.hypr.dispatch('pin', target)
+                    self.dispatch('pin', target)
             else:
-                self.hypr.dispatch('settiled', target)
+                self.dispatch('settiled', target)
         self.managed.pop(address, None)
         self.journal()
 
@@ -333,149 +339,209 @@ class Controller:
         self.reservations = self.hypr.reservations()
 
     def profile_minimum_width(self, profile):
-        clients = {c['address']: c for c in self.clients}
-        return max((self.minimum_widths.get((address, self.identity(clients[address])), 0)
+        return max((self.minimum_widths.get((address, self.identity(self.by_address[address])), 0)
                     for slot in profile['slots']
-                    if (address := self.bindings.get(slot['id'])) in clients), default=0)
+                    if (address := self.bindings.get(slot['id'])) in self.by_address), default=0)
 
-    def reconcile(self, config_reload=False):
+    def index_snapshot(self):
+        self.by_address = {c['address']: c for c in self.clients}
+        self.by_class = {}
+        for client in self.clients:
+            if client['mapped'] and (client['address'] in self.managed or
+                    not (client.get('fullscreen') or client.get('grouped'))):
+                self.by_class.setdefault(client['class'], []).append(client)
+        self.by_workspace = {workspace_key(w): w for w in self.workspaces}
+
+    def update_constraints(self, now):
+        def alive(key):
+            client = self.by_address.get(key[0])
+            return client and self.identity(client) == key[1]
+        self.minimum_widths = {key: width for key, width in self.minimum_widths.items() if alive(key)}
+        self.minimum_heights = {key: height for key, height in self.minimum_heights.items() if alive(key)}
+        self.size_requests = {key: value for key, value in self.size_requests.items() if alive(key)}
+        # Infer constraints only from a recent resize, not a window's initial size.
+        for (address, identity, requested_width), (_, requested_at) in self.size_requests.items():
+            client = self.by_address[address]
+            if (not client.get('fullscreen') and .12 <= now - requested_at <= 2
+                    and client['size'][0] > requested_width + 1):
+                key = (address, identity)
+                self.minimum_widths[key] = max(self.minimum_widths.get(key, 0), client['size'][0])
+
+    def plan_profiles(self):
+        active = {m['name']: active_profile(self.config, m) for m in self.monitors}
+        contexts, desired = {}, {}
+        for monitor in self.monitors:
+            name = monitor['name']
+            profile = active[name]
+            current = self.reservations.get(name, (0, 0))
+            width = geometry(monitor, profile, current,
+                             minimum_width=self.profile_minimum_width(profile))[0] if profile else 0
+            desired[name] = (width, 0) if profile and profile['side'] == 'left' else (0, width)
+            for p in self.config['profiles']:
+                if not (self.config['enabled'] and p['enabled'] and p['monitor'] == name):
+                    continue
+                workspace = self.by_workspace.get(p['workspace'])
+                # Do not pull a workspace back from another display.
+                if workspace and workspace.get('monitor') != name:
+                    continue
+                contexts[id(p)] = (monitor, current)
+        profiles = [p for p in self.config['profiles'] if id(p) in contexts]
+        profiles.sort(key=lambda p: active.get(p['monitor']) is not p)
+        return active, contexts, profiles, desired
+
+    def ensure_reservations(self, desired, now):
+        pending = self.pending_reservation
+        if desired == self.reservations and (pending is None or pending['desired'] == desired):
+            self.pending_reservation = None
+            return True
+        if pending is None or pending['desired'] != desired:
+            before = dict(self.reservations)
+            self.journal(reservations=desired)  # Recovery record precedes mutation.
+            try:
+                self.hypr.reserve(desired)
+            except Exception:
+                self.journal()
+                self.settle_at = now + 2
+                raise
+            self.pending_reservation = {'desired': desired, 'before': before, 'deadline': now + 2}
+            self.mutations += 1
+            # One immediate observation also handles already-acknowledged surfaces.
+            self.reservations = self.hypr.reservations()
+            if self.reservations == desired:
+                self.pending_reservation = None
+                return True
+        elif now >= pending['deadline']:
+            self.pending_reservation = None
+            self.hypr.reserve(pending['before'])
+            self.settle_at = now + 2
+            raise RuntimeError('Oma Edge reservation surface did not become ready; retrying automatically')
+        self.settle_at = now + .05
+        return False
+
+    def match_slots(self, profile, used):
+        matched = []
+        for slot in profile['slots']:
+            candidates = [c for c in self.by_class.get(slot['class'], []) if c['address'] not in used]
+            candidates = self.slot_candidates(slot, candidates, profile['workspace'])
+            if not candidates:
+                continue
+            client = candidates[0]
+            address = client['address']
+            known = self.managed.get(address, {}).get('identity') == self.identity(client)
+            if not known and (client.get('fullscreen') or client.get('grouped')):
+                continue
+            self.bindings[slot['id']] = address
+            used.add(address)
+            matched.append((slot, client))
+        return matched
+
+    def plan_geometry(self, profile, matched, monitor, current, now):
+        occupied = dict(profile, slots=[slot for slot, _ in matched])
+        minimum_width = self.profile_minimum_width(profile)
+        target_width = geometry(monitor, occupied, current, minimum_width=minimum_width)[0] - 24
+        keys = [(c['address'], self.identity(c), target_width) for _, c in matched]
+        for key, (_, client) in zip(keys, matched):
+            request = self.size_requests.get(key)
+            if request and .12 <= now - request[1] <= 2 and not client.get('fullscreen'):
+                if client['size'][1] > request[0] + 1:
+                    self.minimum_heights[key] = client['size'][1]
+        floors = [self.minimum_heights.get(key, 0) for key in keys]
+        return geometry(monitor, occupied, current, floors, minimum_width)[1]
+
+    def apply_window(self, profile, client, box, monitor, visible):
+        address = client['address']
+        identity = self.identity(client)
+        if self.managed.get(address, {}).get('identity') != identity:
+            self.managed[address] = {'identity': identity, 'at': client['at'], 'size': client['size'],
+                                     'floating': client['floating'], 'pinned': client['pinned'],
+                                     'workspace': workspace_key(client['workspace'])}
+            self.journal()
+        target_ws = profile['workspace']
+        if target_ws == '*':
+            target_ws = workspace_key(monitor['activeWorkspace']) if visible else 'special:edge-strip'
+        pin = visible and profile['workspace'] == '*'
+        target = 'address:' + address
+        moving = workspace_key(client['workspace']) != target_ws
+        if client['pinned'] and (not pin or moving):
+            self.dispatch('pin', target)
+            client['pinned'] = False
+        if moving:
+            self.dispatch('movetoworkspacesilent', target_ws+','+target)
+        if not client['floating']:
+            self.dispatch('setfloating', target)
+        if pin and not client['pinned']:
+            self.dispatch('pin', target)
+        if client.get('fullscreen'):
+            return  # Don't fight user-requested fullscreen.
+        x, y, width, height = box
+        if client['size'] != [width, height]:
+            key = (address, identity, width)
+            previous = self.size_requests.get(key)
+            if previous is None or previous[0] != height:
+                self.size_requests[key] = (height, time.monotonic())
+                self.settle_at = time.monotonic() + .2
+            self.dispatch('resizewindowpixel', f'exact {width} {height},{target}')
+        if client['at'] != [x, y]:
+            self.dispatch('movewindowpixel', f'exact {x} {y},{target}')
+
+    def release_unused(self, used):
+        self.size_requests = {key: value for key, value in self.size_requests.items() if key[0] in used}
+        self.minimum_heights = {key: value for key, value in self.minimum_heights.items() if key[0] in used}
+        for address in list(self.managed):
+            if address not in used:
+                self.restore(address, self.by_address.get(address))
+        self.bindings = {key: address for key, address in self.bindings.items() if address in used}
+
+    def reconcile(self):
+        self.waiting = False
+        before = self.mutations
         try:
             self.refresh()
-            if self.settle_at is not None and time.monotonic() >= self.settle_at:
+            self.index_snapshot()
+            now = time.monotonic()
+            if self.settle_at is not None and now >= self.settle_at:
                 self.settle_at = None
-            # Only infer constraints from an acknowledged resize, never the
-            # arbitrary size a window had before it joined the strip.
-            clients = {c['address']: c for c in self.clients}
-            self.minimum_widths = {key: width for key, width in self.minimum_widths.items()
-                                   if key[0] in clients and self.identity(clients[key[0]]) == key[1]}
-            for (address, identity, requested_width), (_, requested_at) in self.size_requests.items():
-                client = clients.get(address)
-                if (client and self.identity(client) == identity and not client.get('fullscreen')
-                        and .12 <= time.monotonic() - requested_at <= 2
-                        and client['size'][0] > requested_width + 1):
-                    key = (address, identity)
-                    self.minimum_widths[key] = max(self.minimum_widths.get(key, 0), client['size'][0])
-            active = {m['name']: active_profile(self.config, m) for m in self.monitors}
-            contexts = {}
-            for m in self.monitors:
-                p = active[m['name']]
-                current = self.reservations.get(m['name'], (0, 0))
-                width = geometry(m, p, current, minimum_width=self.profile_minimum_width(p))[0] if p else 0
-                desired = (width, 0) if p and p['side'] == 'left' else (0, width)
-                if desired != current:
-                    # Journal before mutation for recovery if the controller stops mid-apply.
-                    self.reservations[m['name']] = desired
-                    self.journal()
-                    try:
-                        self.hypr.reserve(m['name'], *desired)
-                    except Exception:
-                        self.reservations[m['name']] = current
-                        self.journal()
-                        self.settle_at = time.monotonic() + 2
-                        raise
-                for profile in self.config['profiles']:
-                    if self.config['enabled'] and profile['enabled'] and profile['monitor'] == m['name']:
-                        workspace = next((w for w in self.workspaces if workspace_key(w) == profile['workspace']), None)
-                        # A profile is tied to a monitor: don't pull a workspace
-                        # back from another display merely because it has apps.
-                        if workspace and workspace.get('monitor') != m['name']:
-                            continue
-                        contexts[id(profile)] = (m, current)
-            used = set()
-            by_address = {c['address']: c for c in self.clients}
-            by_class = {}
-            for client in self.clients:
-                if client['mapped'] and (client['address'] in self.managed or
-                        not (client.get('fullscreen') or client.get('grouped'))):
-                    by_class.setdefault(client['class'], []).append(client)
-            profiles = [p for p in self.config['profiles'] if id(p) in contexts]
-            # Visible profiles get first claim if several profiles match the same app.
-            profiles.sort(key=lambda p: active.get(p['monitor']) is not p)
-            for p in profiles:
-                visible = active.get(p['monitor']) is p
-                matched = []
-                for slot in p['slots']:
-                    candidates = [c for c in by_class.get(slot['class'], []) if c['address'] not in used]
-                    candidates = self.slot_candidates(slot, candidates, p['workspace'])
-                    if not candidates:
-                        continue
-                    c = candidates[0]
-                    address = c['address']
-                    # Select first, then lay out only occupied slots. Missing apps
-                    # keep their assignment for reopening, not an empty rectangle.
-                    if (address not in self.managed or self.managed[address]['identity'] != self.identity(c)) and (c.get('fullscreen') or c.get('grouped')):
-                        continue
-                    self.bindings[slot['id']] = address
-                    used.add(address)
-                    matched.append((slot, c))
-                m, current = contexts[id(p)]
-                occupied = dict(p, slots=[slot for slot, _ in matched])
-                minimum_width = self.profile_minimum_width(p)
-                target_width = geometry(m, occupied, current, minimum_width=minimum_width)[0] - 24
-                size_keys = [(c['address'], self.identity(c), target_width) for _, c in matched]
-                # Wayland clients acknowledge requested sizes asynchronously.
-                # Inspect the settled result of our previous resize before retrying.
-                for key, (_, client) in zip(size_keys, matched):
-                    request = self.size_requests.get(key)
-                    if request and .12 <= time.monotonic() - request[1] <= 2 and not client.get('fullscreen'):
-                        if client['size'][1] > request[0] + 1:
-                            self.minimum_heights[key] = client['size'][1]
-                floors = [self.minimum_heights.get(key, 0) for key in size_keys]
-                boxes = geometry(m, occupied, current, floors, minimum_width)[1]
-                for (slot, c), box in zip(matched, boxes):
-                    address = c['address']
-                    if address in self.managed and self.managed[address]['identity'] != self.identity(c):
-                        self.managed.pop(address)
-                    if address not in self.managed:
-                        if c.get('fullscreen') or c.get('grouped'):
-                            used.remove(address)
-                            continue
-                        self.managed[address] = {'identity': self.identity(c), 'at': c['at'], 'size': c['size'],
-                                                 'floating': c['floating'], 'pinned': c['pinned'],
-                                                 'workspace': workspace_key(c['workspace'])}
-                        self.journal()
-                    # Per-workspace windows live on that workspace and naturally disappear.
-                    # All-workspace windows are parked while an explicit override is active.
-                    target_ws = p['workspace']
-                    if target_ws == '*':
-                        target_ws = workspace_key(next(m for m in self.monitors if m['name'] == p['monitor'])['activeWorkspace']) if visible else 'special:edge-strip'
-                    pin = visible and p['workspace'] == '*'
-                    target = 'address:' + address
-                    moving = workspace_key(c['workspace']) != target_ws
-                    if c['pinned'] and (not pin or moving):
-                        self.hypr.dispatch('pin', target)
-                        c['pinned'] = False
-                    if moving:
-                        self.hypr.dispatch('movetoworkspacesilent', target_ws+','+target)
-                    if not c['floating']:
-                        self.hypr.dispatch('setfloating', target)
-                    if pin and not c['pinned']:
-                        self.hypr.dispatch('pin', target)
-                    if c.get('fullscreen'):
-                        continue  # Don't fight user-requested fullscreen.
-                    x, y, w, h = box
-                    if c['size'] != [w, h]:
-                        key = (address, self.identity(c), w)
-                        previous = self.size_requests.get(key)
-                        if previous is None or previous[0] != h:
-                            self.size_requests[key] = (h, time.monotonic())
-                            self.settle_at = time.monotonic() + .2
-                        self.hypr.dispatch('resizewindowpixel', f'exact {w} {h},{target}')
-                    if c['at'] != [x, y]:
-                        self.hypr.dispatch('movewindowpixel', f'exact {x} {y},{target}')
-            self.size_requests = {key: value for key, value in self.size_requests.items() if key[0] in used}
-            self.minimum_heights = {key: value for key, value in self.minimum_heights.items()
-                                    if key[0] in used}
-            for address in list(self.managed):
-                if address not in used:
-                    self.restore(address, by_address.get(address))
-            self.bindings = {key: address for key, address in self.bindings.items() if address in used}
-            self.journal()
-            self.error = ''
-            self.refresh()
+            self.update_constraints(now)
+            active, contexts, profiles, desired = self.plan_profiles()
+            if not self.ensure_reservations(desired, now):
+                self.waiting = True
+            else:
+                used = set()
+                for profile in profiles:
+                    matched = self.match_slots(profile, used)
+                    monitor, current = contexts[id(profile)]
+                    boxes = self.plan_geometry(profile, matched, monitor, current, now)
+                    for (_, client), box in zip(matched, boxes):
+                        self.apply_window(profile, client, box, monitor, active[profile['monitor']] is profile)
+                self.release_unused(used)
+                self.journal()
+                self.error = ''
+                if self.mutations != before:
+                    self.refresh()
         except Exception as exc:
             self.error = str(exc)
+        if not self.waiting:
+            self.finish_save()
         self.publish()
+
+    def finish_save(self):
+        transaction = self.pending_save
+        if transaction is None:
+            return
+        if self.error and 'failure' not in transaction:
+            transaction['failure'] = self.error
+            self.config = transaction['config']
+            self.bindings = transaction['bindings']
+            atomic_json(CONFIG, self.config)
+            self.reconcile()
+            return
+        if 'failure' in transaction:
+            recovery = ('; recovery failed: ' + self.error) if self.error else ' (previous settings restored)'
+            self.save_result = {'ok': False, 'error': transaction['failure'] + recovery}
+        else:
+            self.config_error = ''
+            self.save_result = {'ok': True}
+        self.pending_save = None
 
     def publish(self):
         bars = {}
@@ -490,9 +556,17 @@ class Controller:
         return state
 
     def cleanup(self):
+        if self.pending_save is not None:
+            self.config = self.pending_save['config']
+            atomic_json(CONFIG, self.config)
+        self.pending_save = None
         self.config['enabled'] = False
         self.reconcile()
-        # Reconcile only releases connected outputs; reloads clear disconnected output rules.
+        # Shutdown has no event loop left; allow bounded reservation release.
+        deadline = time.monotonic() + 2.5
+        while self.waiting and time.monotonic() < deadline:
+            time.sleep(.05)
+            self.reconcile()
 
     def request(self, req):
         action = req.get('action')
@@ -500,6 +574,8 @@ class Controller:
             self.refresh()
             return self.publish()
         if action == 'save':
+            if self.pending_save is not None:
+                return {'ok': False, 'error': 'Another configuration is still being applied'}
             config = validate(req['config'])
             self.refresh()
             # Reject impossible geometry before writing or moving anything.
@@ -512,21 +588,24 @@ class Controller:
             if CONFIG.exists():
                 atomic_json(CONFIG.with_suffix('.json.previous'), self.config)
             atomic_json(CONFIG, config)
+            self.pending_save = {'config': previous, 'bindings': previous_bindings}
+            self.save_result = None
             self.set_config(config)
             self.reconcile()
-            if self.error:
-                error = self.error
-                self.config = previous
-                self.bindings = previous_bindings
-                atomic_json(CONFIG, previous)
-                self.reconcile()
-                return {'ok': False, 'error': error + ' (previous settings restored)'}
-            self.config_error = ''
-            return {'ok': True}
+            # None defers the RPC reply until surface acknowledgement or rollback.
+            return self.save_result
         if action == 'reapply':
             self.reconcile()
-            return {'ok': not self.error, 'error': self.error}
+            return {'ok': not self.error, 'error': self.error, 'pending': self.waiting}
         raise ValueError('Unknown action')
+
+def reply(conn, response):
+    with conn:
+        try:
+            conn.sendall(json.dumps(response).encode()+b'\n')
+        except (BrokenPipeError, ConnectionResetError, socket.timeout):
+            pass  # A panel reload must not take down the controller.
+
 
 def daemon():
     RUNTIME.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -550,7 +629,7 @@ def daemon():
     controller = Controller()
     events = None
     pending = time.monotonic()
-    reload_pending = False
+    deferred = None
     event_buffer = b''
     last_signature = None
     last_poll = 0
@@ -571,24 +650,30 @@ def daemon():
                     if events:
                         events.close()
                     events = None
-            if now-last_poll > 1:
+            if now-last_poll > 1 and controller.pending_save is None:
                 last_poll = now
                 signature = CONFIG.stat().st_mtime_ns if CONFIG.exists() else None
                 if signature != last_signature:
                     last_signature = signature
                     try:
-                        controller.load()
-                        pending = now
+                        had_error = bool(controller.config_error)
+                        if controller.load():
+                            pending = now
+                        elif had_error:
+                            controller.publish()
                     except Exception as exc:
                         controller.config_error = str(exc)
                         controller.publish()
             if pending is not None and now >= pending:
-                controller.reconcile(reload_pending)
-                reload_pending = False
+                controller.reconcile()
                 pending = controller.settle_at
             if pending is None and controller.settle_at is not None:
                 pending = controller.settle_at
-            readers, _, _ = select.select([server] + ([events] if events else []), [], [], .15)
+            if deferred is not None and controller.save_result is not None:
+                reply(deferred, controller.save_result)
+                deferred = None
+            timeout = min(.15, max(0, pending - time.monotonic())) if pending is not None else .15
+            readers, _, _ = select.select([server] + ([events] if events else []), [], [], timeout)
             if events in readers:
                 chunk = events.recv(65536)
                 if not chunk:
@@ -600,34 +685,35 @@ def daemon():
                     lines = event_buffer.split(b'\n')
                     event_buffer = lines.pop()
                     names = [line.decode(errors='replace').split('>>', 1)[0] for line in lines]
-                    if 'configreloaded' in names:
-                        reload_pending = True
                     if any(n in ('workspace', 'workspacev2', 'focusedmon', 'openwindow', 'closewindow',
                                  'movewindow', 'movewindowv2', 'monitoradded', 'monitorremoved',
                                  'monitoraddedv2', 'configreloaded', 'changefloatingmode', 'pin', 'fullscreen') for n in names) or b'custom>>edge-strip-layout' in lines:
-                        if pending is None:
-                            pending = time.monotonic() + .06
+                        event_at = time.monotonic() + .06
+                        pending = min(pending, event_at) if pending is not None else event_at
             if server in readers:
                 conn, _ = server.accept()
-                with conn:
-                    conn.settimeout(2)
-                    try:
-                        buf = b''
-                        while b'\n' not in buf:
-                            part = conn.recv(65536)
-                            if not part:
-                                break
-                            buf += part
-                            if len(buf) > 1000000:
-                                raise ValueError('Request too large')
-                        response = controller.request(json.loads(buf.split(b'\n')[0]))
-                    except Exception as exc:
-                        response = {'ok': False, 'error': str(exc)}
-                    try:
-                        conn.sendall(json.dumps(response).encode()+b'\n')
-                    except (BrokenPipeError, ConnectionResetError, socket.timeout):
-                        pass  # A panel reload must not take down the controller.
+                conn.settimeout(2)
+                try:
+                    buf = b''
+                    while b'\n' not in buf:
+                        part = conn.recv(65536)
+                        if not part:
+                            break
+                        buf += part
+                        if len(buf) > 1000000:
+                            raise ValueError('Request too large')
+                    response = controller.request(json.loads(buf.split(b'\n')[0]))
+                except Exception as exc:
+                    response = {'ok': False, 'error': str(exc)}
+                if response is None:
+                    deferred = conn
+                else:
+                    reply(conn, response)
+                if controller.settle_at is not None:
+                    pending = min(pending, controller.settle_at) if pending is not None else controller.settle_at
     finally:
+        if deferred is not None:
+            reply(deferred, {'ok': False, 'error': 'Service stopped before apply completed'})
         controller.cleanup()
         server.close()
         path.unlink(missing_ok=True)

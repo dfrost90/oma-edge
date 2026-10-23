@@ -2,11 +2,19 @@
 const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
+const ProfileModel = require('../ProfileModel.js');
 const qml = fs.readFileSync(__dirname + '/../Panel.qml', 'utf8');
 const context = {config: {version:1, enabled:true, profiles:[{monitor:'DP-1',workspace:'1',enabled:true,width:12,side:'right',fullBar:true,slots:[{id:'telegram',class:'telegram',weight:1}]}]}, draft:null, profileIndex:0, dirty:false, message:''};
 context.root = context;
+context.ProfileModel = ProfileModel;
+context.clone = ProfileModel.clone;
+context.groupedProfiles = () => ProfileModel.groupedProfiles(context.config);
+context.rpc = {running: false};
+context.pendingSelection = '';
+context.savedSelection = '';
+context.state = {reload() {}, text: () => JSON.stringify(context.snapshot)};
 vm.createContext(context);
-for (const name of ['clone','groupedProfiles','chooseWorkspaces','edit','save','addWindow','windowKey']) {
+for (const name of ['chooseWorkspaces','edit','save','addWindow','windowKey','selectProfile','finishRequest','readState']) {
   const start = qml.indexOf('    function ' + name + '(');
   const end = qml.indexOf('\n    }', start) + 6;
   vm.runInContext(qml.slice(start,end), context);
@@ -79,3 +87,59 @@ vm.runInContext(rpcBlock.match(/onStarted: \{([\s\S]*?)\n        \}/)[1], contex
 assert.equal(context.pipeData, JSON.stringify(privateRequest) + '\n');
 assert.equal(context.payload, '');
 console.log('Private panel requests use stdin, not command-line arguments');
+
+// A failed request must preserve the selected profile and the editable draft.
+context.config = {version:1, enabled:true, profiles:[1,2,3].map(n => ({
+  monitor:'DP-1', workspace:String(n), enabled:true, side:'right', width:20, slots:[]
+}))};
+context.rpc.running = false;
+context.send = data => { context.sent = data; };
+context.selectProfile(0);
+context.edit('width', 25);
+context.save(false);
+context.finishRequest({ok:false, error:'Reservation timed out'});
+assert.equal(context.profileIndex, 0);
+assert.equal(context.draft.width, 25);
+assert.equal(context.dirty, true);
+context.selectProfile(context.profileIndex);
+assert.equal(context.draft.workspaces[0], '1');
+assert.equal(context.draft.width, 20);
+
+// A successful save selects the same logical profile after serialization reorders it.
+context.edit('width', 30);
+context.save(false);
+context.finishRequest({ok:true});
+context.snapshot = {config: context.sent.config};
+context.readState();
+assert.equal(context.draft.workspaces[0], '1');
+assert.equal(context.draft.width, 30);
+assert.equal(context.dirty, false);
+
+// Slot IDs survive workspace additions/removals, app reordering and weight edits.
+let config = {version:1, enabled:true, profiles:[{
+  monitor:'DP-1', workspace:'1', enabled:true, side:'right', width:20,
+  slots:[{id:'first', class:'chat', weight:1}, {id:'second', class:'browser', weight:1}]
+}]};
+let draft = ProfileModel.groupedProfiles(config)[0];
+draft.workspaces.push('2');
+config = ProfileModel.saveProfile(config, draft, false).config;
+const original = JSON.parse(JSON.stringify(config));
+const idsByWorkspace = Object.fromEntries(config.profiles.map(p => [p.workspace, p.slots.map(s=>s.id)]));
+assert.deepEqual(idsByWorkspace['1'], ['first','second']);
+assert.equal(new Set(config.profiles.flatMap(p=>p.slots.map(s=>s.id))).size, 4);
+draft = ProfileModel.groupedProfiles(config)[0];
+draft.slots.reverse();
+draft.slots[0].weight = 3;
+draft.workspaces = ['2','1','3'];
+config = ProfileModel.saveProfile(config, draft, false).config;
+for (const p of config.profiles.filter(p=>p.workspace!=='3')) {
+  assert.deepEqual(p.slots.map(s=>s.id), idsByWorkspace[p.workspace].slice().reverse());
+}
+assert.equal(new Set(config.profiles.flatMap(p=>p.slots.map(s=>s.id))).size, 6);
+assert.ok(config.profiles.every(p=>p.slots.every(s=>!('sourceIds' in s))));
+assert.equal(original.profiles[0].slots[0].weight, 1);
+draft = ProfileModel.groupedProfiles(config)[0];
+draft.workspaces = ['2'];
+const reduced = ProfileModel.saveProfile(config, draft, false).config;
+assert.deepEqual(reduced.profiles[0].slots.map(s=>s.id), idsByWorkspace['2'].slice().reverse());
+console.log('Failed-save selection, successful-save selection and stable slot IDs passed');

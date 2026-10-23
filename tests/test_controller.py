@@ -17,11 +17,13 @@ class FakeHypr:
     def read(self, what):
         return copy.deepcopy({'monitors': self.monitors, 'clients': self.clients, 'workspaces': []}[what])
 
-    def reserve(self, name, left, right):
+    def reserve(self, desired):
         if self.fail_reserve:
             self.fail_reserve = False
             raise RuntimeError('reservation failed')
-        self.monitors[0]['reserved'] = [left,30,right,0]
+        for monitor in self.monitors:
+            left, right = desired.get(monitor['name'], (0, 0))
+            monitor['reserved'] = [left, 30, right, 0]
 
     def reservations(self):
         return {m['name']: (m['reserved'][0], m['reserved'][2]) for m in self.monitors}
@@ -233,7 +235,7 @@ class TerminalSelectionTests(unittest.TestCase):
         self.assertTrue(result['ok'], result)
         self.assertEqual(set(self.controller.managed), {self.cliamp['address'], other['address']})
         self.assertEqual(self.controller.bindings['new_position_1'], self.cliamp['address'])
-        self.controller.reconcile(config_reload=True)
+        self.controller.reconcile()
         self.assertEqual(set(self.controller.managed), {self.cliamp['address'], other['address']})
 
     def test_replacing_selection_does_not_retain_old_terminal(self):
